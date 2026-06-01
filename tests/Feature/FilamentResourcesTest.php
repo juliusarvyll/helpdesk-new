@@ -16,6 +16,7 @@ use App\Models\User;
 use App\TicketStatus;
 use Database\Seeders\ShieldSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role as PermissionRole;
 use Tests\TestCase;
@@ -137,7 +138,7 @@ class FilamentResourcesTest extends TestCase
     public function test_dashboard_ticket_analytics_helpers(): void
     {
         Ticket::factory()->create([
-            'status' => \App\TicketStatus::Closed,
+            'status' => TicketStatus::Closed,
             'start_time' => now()->subHours(3),
             'end_time' => now(),
         ]);
@@ -215,6 +216,38 @@ class FilamentResourcesTest extends TestCase
         $this->assertArrayNotHasKey('technicalSupportUsers', $data);
     }
 
+    public function test_direct_ticket_create_data_uses_authenticated_user_and_removes_inventory_fields(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user);
+
+        $data = TicketResource::prepareDirectTicketCreateData([
+            'subject' => 'Cannot print',
+            'description' => 'The printer shows an error.',
+            'category' => '1',
+            'issue_id' => 2,
+            'client_id' => User::factory()->create()->id,
+            'priority' => 'critical',
+            'inventory_item_id' => 10,
+            'inventory_item_serial_number_id' => 20,
+            'asset_id' => 'AST-001',
+            'asset_name' => 'Printer',
+            'client_comments' => 'extra',
+            'technicalSupportUsers' => [1, 2],
+        ]);
+
+        $this->assertSame($user->id, $data['client_id']);
+        $this->assertSame('normal', $data['priority']);
+        $this->assertSame(TicketStatus::Active->value, $data['status']);
+        $this->assertArrayNotHasKey('inventory_item_id', $data);
+        $this->assertArrayNotHasKey('inventory_item_serial_number_id', $data);
+        $this->assertArrayNotHasKey('asset_id', $data);
+        $this->assertArrayNotHasKey('asset_name', $data);
+        $this->assertArrayNotHasKey('client_comments', $data);
+        $this->assertArrayNotHasKey('technicalSupportUsers', $data);
+    }
+
     public function test_closed_ticket_does_not_show_status_transition_actions(): void
     {
         Permission::firstOrCreate(['name' => 'update_ticket', 'guard_name' => 'web']);
@@ -229,6 +262,84 @@ class FilamentResourcesTest extends TestCase
         $this->assertFalse(TicketResource::canShowStatusTransitionAction($ticket, 'startProgress'));
         $this->assertFalse(TicketResource::canShowStatusTransitionAction($ticket, 'markPending'));
         $this->assertFalse(TicketResource::canShowStatusTransitionAction($ticket, 'close'));
+    }
+
+    public function test_unassigned_ticket_does_not_show_status_transition_actions(): void
+    {
+        Permission::firstOrCreate(['name' => 'update_ticket', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'technical_support', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->givePermissionTo('update_ticket');
+        $user->assignRole('technical_support');
+        $ticket = Ticket::factory()->create(['status' => TicketStatus::Active]);
+
+        $this->actingAs($user);
+
+        $this->assertFalse(TicketResource::canShowStatusTransitionAction($ticket, 'startProgress'));
+        $this->assertFalse(TicketResource::canShowStatusTransitionAction($ticket, 'markPending'));
+        $this->assertFalse(TicketResource::canShowStatusTransitionAction($ticket, 'close'));
+    }
+
+    public function test_assigned_ticket_can_show_status_transition_actions(): void
+    {
+        Permission::firstOrCreate(['name' => 'update_ticket', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'technical_support', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->givePermissionTo('update_ticket');
+        $user->assignRole('technical_support');
+        $ticket = Ticket::factory()->create(['status' => TicketStatus::Active]);
+        $ticket->technicalSupportUsers()->attach($user);
+
+        $this->actingAs($user);
+
+        $this->assertTrue(TicketResource::canShowStatusTransitionAction($ticket, 'startProgress'));
+    }
+
+    public function test_super_admin_and_technical_support_can_assign_unassigned_tickets(): void
+    {
+        Permission::firstOrCreate(['name' => 'update_ticket', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'technical_support', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $ticket = Ticket::factory()->create(['status' => TicketStatus::Active]);
+
+        $superAdmin = User::factory()->create();
+        $superAdmin->givePermissionTo('update_ticket');
+        $superAdmin->assignRole('super_admin');
+
+        $technicalSupport = User::factory()->create();
+        $technicalSupport->givePermissionTo('update_ticket');
+        $technicalSupport->assignRole('technical_support');
+
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('update_ticket');
+        $admin->assignRole('admin');
+
+        $this->actingAs($superAdmin);
+        $this->assertTrue(TicketResource::canShowAssignTicketAction($ticket));
+
+        $this->actingAs($technicalSupport);
+        $this->assertTrue(TicketResource::canShowAssignTicketAction($ticket));
+
+        $this->actingAs($admin);
+        $this->assertFalse(TicketResource::canShowAssignTicketAction($ticket));
+    }
+
+    public function test_assigning_technical_support_users_marks_ticket_assigned(): void
+    {
+        Notification::fake();
+        PermissionRole::firstOrCreate(['name' => 'technical_support', 'guard_name' => 'web']);
+        $ticket = Ticket::factory()->create(['status' => TicketStatus::Active]);
+        $technicalSupport = User::factory()->create();
+        $technicalSupport->assignRole('technical_support');
+
+        TicketResource::assignTechnicalSupportUsers($ticket, [$technicalSupport->id]);
+
+        $ticket->refresh();
+
+        $this->assertTrue($ticket->technicalSupportUsers()->whereKey($technicalSupport->id)->exists());
+        $this->assertSame('Assigned', $ticket->support_assignment_status);
+        $this->assertNotNull($ticket->assigned_at);
     }
 
     public function test_client_role_ticket_create_data_uses_authenticated_user_as_client_and_department(): void

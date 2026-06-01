@@ -4,11 +4,12 @@ namespace App\Filament\Resources;
 
 use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\TicketResource\Pages;
+use App\Models\InventoryItemSerialNumber;
 use App\Models\IssueCategory;
 use App\Models\IssueList;
-use App\Models\InventoryItemSerialNumber;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Notifications\TicketAssigned;
 use App\TicketStatus;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DateTimePicker;
@@ -16,8 +17,8 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Get;
 use Filament\Forms\Form;
+use Filament\Forms\Get;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\BulkActionGroup;
@@ -36,6 +37,8 @@ class TicketResource extends Resource
     use HasCompactTableColumns;
 
     protected const TECHNICAL_SUPPORT_ASSIGNMENT_ROLES = ['super_admin', 'admin', 'technical_support'];
+
+    protected const UNASSIGNED_TICKET_ASSIGNMENT_ROLES = ['super_admin', 'technical_support'];
 
     protected static ?string $model = Ticket::class;
 
@@ -58,7 +61,7 @@ class TicketResource extends Resource
             $query->visibleTo($user);
         }
 
-        return $query->with('issue');
+        return $query->with(['issue', 'technicalSupportUsers']);
     }
 
     public static function form(Form $form): Form
@@ -76,11 +79,13 @@ class TicketResource extends Resource
                 ->options(['low' => 'Low', 'normal' => 'Normal', 'critical' => 'Critical'])
                 ->default('normal')
                 ->disabled(fn (string $operation): bool => $operation === 'edit' && static::isClient())
+                ->hiddenOn('create')
                 ->required(),
             Select::make('status')
                 ->options(TicketStatus::options())
                 ->default(TicketStatus::Active->value)->required()
                 ->visible(fn (): bool => static::canManageTechnicalSupportAssignments())
+                ->hiddenOn('create')
                 ->disabled(),
             Select::make('category')
                 ->options(fn () => IssueCategory::where('is_deleted', 0)->pluck('name', 'id'))
@@ -107,6 +112,7 @@ class TicketResource extends Resource
                 ->live()
                 ->preload()
                 ->afterStateUpdated(fn (callable $set) => $set('inventory_item_serial_number_id', null))
+                ->hiddenOn('create')
                 ->disabled(fn (string $operation): bool => $operation === 'edit' && static::isClient()),
             Select::make('inventory_item_serial_number_id')
                 ->label('Affected Serial Number')
@@ -118,6 +124,7 @@ class TicketResource extends Resource
                     : [])
                 ->searchable()
                 ->required(fn (Get $get): bool => filled($get('inventory_item_id')))
+                ->hiddenOn('create')
                 ->disabled(fn (Get $get, string $operation): bool => blank($get('inventory_item_id')) || ($operation === 'edit' && static::isClient())),
             Select::make('client_id')
                 ->label('Client')
@@ -138,11 +145,12 @@ class TicketResource extends Resource
                 ->default(fn () => static::canSelectTicketClient() ? null : auth()->id())
                 ->disabled(fn () => ! static::canSelectTicketClient())
                 ->searchable()
+                ->hiddenOn('create')
                 ->required(),
             Placeholder::make('department_name')
                 ->label('Department')
                 ->content(fn (): string => auth()->user()?->department?->name ?? 'No department assigned')
-                ->visible(fn (): bool => ! static::canSelectTicketClient()),
+                ->visible(fn (string $operation): bool => $operation !== 'create' && ! static::canSelectTicketClient()),
             Select::make('technicalSupportUsers')
                 ->label('Technical Support')
                 ->multiple()
@@ -156,17 +164,18 @@ class TicketResource extends Resource
                 ->preload(),
             DateTimePicker::make('assigned_at')
                 ->disabled()
-                ->visible(fn (): bool => static::canManageTechnicalSupportAssignments()),
+                ->visible(fn (string $operation): bool => $operation !== 'create' && static::canManageTechnicalSupportAssignments()),
             DateTimePicker::make('start_time')
                 ->disabled()
-                ->visible(fn (): bool => static::canManageTechnicalSupportAssignments()),
+                ->visible(fn (string $operation): bool => $operation !== 'create' && static::canManageTechnicalSupportAssignments()),
             DateTimePicker::make('end_time')
                 ->disabled()
-                ->visible(fn (): bool => static::canManageTechnicalSupportAssignments()),
+                ->visible(fn (string $operation): bool => $operation !== 'create' && static::canManageTechnicalSupportAssignments()),
             Textarea::make('technical_support_remarks')
-                ->visible(fn (): bool => static::canManageTechnicalSupportAssignments()),
+                ->visible(fn (string $operation): bool => $operation !== 'create' && static::canManageTechnicalSupportAssignments()),
             Textarea::make('client_comments')
                 ->label(fn (): string => static::isClient() ? 'Comment' : 'Client Comments')
+                ->hiddenOn('create')
                 ->columnSpanFull(),
         ]);
     }
@@ -252,6 +261,26 @@ class TicketResource extends Resource
                     ->visible(fn (): bool => auth()->user()?->hasRole('technical_support') ?? false),
             ])
             ->actions([
+                Action::make('assign_technical_support')
+                    ->label('Assign')
+                    ->icon('heroicon-o-user-plus')
+                    ->color('info')
+                    ->visible(fn (Ticket $record): bool => static::canShowAssignTicketAction($record))
+                    ->form([
+                        Select::make('technicalSupportUsers')
+                            ->label('Technical Support')
+                            ->multiple()
+                            ->options(fn (): array => static::technicalSupportAssignmentOptions())
+                            ->default(fn (): array => static::defaultTechnicalSupportAssignmentSelection())
+                            ->required()
+                            ->searchable()
+                            ->preload(),
+                    ])
+                    ->action(fn (Ticket $record, array $data): Ticket => static::assignTechnicalSupportUsers(
+                        $record,
+                        $data['technicalSupportUsers'] ?? []
+                    ))
+                    ->successNotificationTitle('Ticket assigned.'),
                 Action::make('start_progress')
                     ->label('Start Progress')
                     ->icon('heroicon-o-play')
@@ -317,15 +346,126 @@ class TicketResource extends Resource
         return auth()->user()?->hasAnyRole(['super_admin', 'admin', 'technical_support']) ?? false;
     }
 
+    public static function canAssignUnassignedTickets(): bool
+    {
+        return auth()->user()?->hasAnyRole(static::UNASSIGNED_TICKET_ASSIGNMENT_ROLES) ?? false;
+    }
+
+    public static function canShowAssignTicketAction(Ticket $ticket): bool
+    {
+        return $ticket->status !== TicketStatus::Closed
+            && static::canAssignUnassignedTickets()
+            && (auth()->user()?->can('update', $ticket) ?? false)
+            && ! static::ticketHasTechnicalSupportAssignment($ticket);
+    }
+
     public static function canShowStatusTransitionAction(Ticket $ticket, string $ability): bool
     {
         return $ticket->status !== TicketStatus::Closed
+            && static::ticketHasTechnicalSupportAssignment($ticket)
+            && static::currentUserIsAssignedTechnicalSupport($ticket)
             && (auth()->user()?->can($ability, $ticket) ?? false);
     }
 
     public static function technicalSupportNames(Ticket $ticket): string
     {
         return $ticket->technicalSupportUsers->pluck('name')->join(', ') ?: 'Unassigned';
+    }
+
+    public static function ticketHasTechnicalSupportAssignment(Ticket $ticket): bool
+    {
+        if ($ticket->relationLoaded('technicalSupportUsers')) {
+            return $ticket->technicalSupportUsers->isNotEmpty();
+        }
+
+        return $ticket->technicalSupportUsers()->exists();
+    }
+
+    public static function currentUserIsAssignedTechnicalSupport(Ticket $ticket): bool
+    {
+        $user = auth()->user();
+
+        if (! $user?->hasRole('technical_support')) {
+            return false;
+        }
+
+        if ($ticket->relationLoaded('technicalSupportUsers')) {
+            return $ticket->technicalSupportUsers->contains($user);
+        }
+
+        return $ticket->technicalSupportUsers()->whereKey($user->id)->exists();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function technicalSupportAssignmentOptions(): array
+    {
+        return User::role(static::TECHNICAL_SUPPORT_ASSIGNMENT_ROLES)
+            ->where('status', 1)
+            ->where('is_deleted', 0)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    /**
+     * @return array<int>
+     */
+    public static function defaultTechnicalSupportAssignmentSelection(): array
+    {
+        $user = auth()->user();
+
+        if (! $user?->hasRole('technical_support')) {
+            return [];
+        }
+
+        return [$user->id];
+    }
+
+    /**
+     * @param  array<int|string>  $technicalSupportUserIds
+     */
+    public static function assignTechnicalSupportUsers(Ticket $ticket, array $technicalSupportUserIds): Ticket
+    {
+        $ticket->technicalSupportUsers()->sync($technicalSupportUserIds);
+        $ticket->load('technicalSupportUsers');
+        $ticket->syncAssignmentState();
+        $ticket->refresh()->load('technicalSupportUsers');
+
+        foreach ($ticket->technicalSupportUsers as $user) {
+            $user->notify(new TicketAssigned($ticket));
+        }
+
+        return $ticket;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function prepareDirectTicketCreateData(array $data): array
+    {
+        unset(
+            $data['inventory_item_id'],
+            $data['inventory_item_serial_number_id'],
+            $data['asset_id'],
+            $data['asset_name'],
+            $data['client_comments'],
+            $data['technicalSupportUsers'],
+            $data['support_assignment_status'],
+            $data['assigned_at'],
+            $data['start_time'],
+            $data['end_time'],
+            $data['technical_support_remarks'],
+            $data['client_confirmation'],
+        );
+
+        $data['client_id'] = auth()->id();
+        $data['priority'] = 'normal';
+        $data['status'] = TicketStatus::Active->value;
+
+        return $data;
     }
 
     protected static function ticketIssueDescription(TextColumn $column): ?string

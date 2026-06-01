@@ -125,22 +125,28 @@ class TicketPolicy
 
     public function startProgress(User $user, Ticket $ticket): bool
     {
-        return $user->hasAnyRole(['super_admin', 'admin', 'technical_support'])
+        return $this->isAssignedTechnicalSupport($user, $ticket)
             && $user->can('update_ticket')
             && $ticket->canTransitionTo(TicketStatus::OnProgress);
     }
 
     public function markPending(User $user, Ticket $ticket): bool
     {
-        return $user->hasAnyRole(['super_admin', 'admin', 'technical_support'])
+        return $this->isAssignedTechnicalSupport($user, $ticket)
             && $user->can('update_ticket')
             && $ticket->canTransitionTo(TicketStatus::Pending);
     }
 
     public function close(User $user, Ticket $ticket): bool
     {
-        return $user->hasAnyRole(['super_admin', 'admin', 'technical_support'])
+        return $this->isAssignedTechnicalSupport($user, $ticket)
             && $user->can('update_ticket')
             && $ticket->canTransitionTo(TicketStatus::Closed);
+    }
+
+    private function isAssignedTechnicalSupport(User $user, Ticket $ticket): bool
+    {
+        return $user->hasRole('technical_support')
+            && $ticket->technicalSupportUsers()->whereKey($user->id)->exists();
     }
 }

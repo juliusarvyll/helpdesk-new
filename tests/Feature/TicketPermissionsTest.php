@@ -18,13 +18,13 @@ class TicketPermissionsTest extends TestCase
     {
         parent::setUp();
 
-        Permission::create(['name' => 'view_any_ticket', 'guard_name' => 'web']);
-        Permission::create(['name' => 'view_ticket', 'guard_name' => 'web']);
-        Permission::create(['name' => 'create_ticket', 'guard_name' => 'web']);
-        Permission::create(['name' => 'update_ticket', 'guard_name' => 'web']);
-        Permission::create(['name' => 'delete_ticket', 'guard_name' => 'web']);
-        Role::create(['name' => 'client', 'guard_name' => 'web']);
-        Role::create(['name' => 'technical_support', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'view_any_ticket', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'view_ticket', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'create_ticket', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'update_ticket', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'delete_ticket', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        Role::firstOrCreate(['name' => 'technical_support', 'guard_name' => 'web']);
     }
 
     public function test_user_with_view_any_permission_can_view_any_tickets(): void
@@ -65,6 +65,7 @@ class TicketPermissionsTest extends TestCase
         $user->givePermissionTo('update_ticket');
         $user->assignRole('technical_support');
         $ticket = Ticket::factory()->create(['status' => TicketStatus::Active]);
+        $ticket->technicalSupportUsers()->attach($user);
 
         $response = $user->can('startProgress', $ticket);
 
@@ -77,6 +78,7 @@ class TicketPermissionsTest extends TestCase
         $user->givePermissionTo('update_ticket');
         $user->assignRole('technical_support');
         $ticket = Ticket::factory()->create(['status' => TicketStatus::Pending]);
+        $ticket->technicalSupportUsers()->attach($user);
 
         $response = $user->can('startProgress', $ticket);
 
@@ -104,6 +106,7 @@ class TicketPermissionsTest extends TestCase
             'status' => TicketStatus::OnProgress,
             'technical_support_remarks' => 'Resolved by replacing the network cable.',
         ]);
+        $ticket->technicalSupportUsers()->attach($user);
 
         $response = $user->can('close', $ticket);
 
@@ -116,10 +119,37 @@ class TicketPermissionsTest extends TestCase
         $user->givePermissionTo('update_ticket');
         $user->assignRole('technical_support');
         $ticket = Ticket::factory()->create(['status' => TicketStatus::Pending]);
+        $ticket->technicalSupportUsers()->attach($user);
 
         $response = $user->can('close', $ticket);
 
         $this->assertTrue($response);
+    }
+
+    public function test_unassigned_technical_support_cannot_start_progress(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('update_ticket');
+        $user->assignRole('technical_support');
+        $ticket = Ticket::factory()->create(['status' => TicketStatus::Active]);
+
+        $response = $user->can('startProgress', $ticket);
+
+        $this->assertFalse($response);
+    }
+
+    public function test_super_admin_cannot_start_progress_unless_they_are_assigned_technical_support(): void
+    {
+        Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->givePermissionTo('update_ticket');
+        $user->assignRole('super_admin');
+        $ticket = Ticket::factory()->create(['status' => TicketStatus::Active]);
+        $ticket->technicalSupportUsers()->attach($user);
+
+        $response = $user->can('startProgress', $ticket);
+
+        $this->assertFalse($response);
     }
 
     public function test_user_without_update_permission_cannot_close_ticket(): void

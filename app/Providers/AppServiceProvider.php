@@ -21,7 +21,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::before(fn ($user, string $ability): ?bool => $user->hasRole('super_admin') ? true : null);
+        Gate::before(fn ($user, string $ability): ?bool => $user->hasRole('super_admin') && ! in_array($ability, [
+            'startProgress',
+            'markPending',
+            'close',
+        ], true) ? true : null);
 
         Vite::prefetch(concurrency: 3);
     }

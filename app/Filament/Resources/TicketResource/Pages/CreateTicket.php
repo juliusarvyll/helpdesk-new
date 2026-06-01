@@ -15,6 +15,7 @@ class CreateTicket extends CreateRecord
     {
         unset($data['department']);
 
+        $data = TicketResource::prepareDirectTicketCreateData($data);
         $data = TicketResource::sanitizeTechnicalSupportAssignmentData($data, allowAssignment: false);
         $data = TicketResource::assignCreatorClientAndDepartmentData($data);
         $data = TicketResource::sanitizeClientTicketData($data, preserveOwnership: true);

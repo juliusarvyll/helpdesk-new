@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Resources\InventoryItemResource;
+use App\Filament\Resources\InventoryItemResource\Pages\ListInventoryItems;
 use App\Filament\Resources\TicketResource;
 use App\Filament\Resources\UserResource;
 use App\Filament\Widgets\TicketStatsOverview;
@@ -15,8 +16,10 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\TicketStatus;
 use Database\Seeders\ShieldSeeder;
+use ErrorException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use ReflectionMethod;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role as PermissionRole;
 use Tests\TestCase;
@@ -97,6 +100,42 @@ class FilamentResourcesTest extends TestCase
         $this->assertSame('["control room.docx","LR101.docx"]', $metadata['source_files']);
         $this->assertSame('true', $metadata['functional']);
         $this->assertNull($metadata['empty']);
+    }
+
+    public function test_inventory_item_import_csv_parser_uses_explicit_escape_parameter(): void
+    {
+        $handle = tmpfile();
+        $this->assertIsResource($handle);
+
+        fwrite($handle, "name,serial_number\nLaptop,SN-1001\n");
+        $metadata = stream_get_meta_data($handle);
+
+        set_error_handler(function (int $severity, string $message, string $file, int $line): bool {
+            if (str_contains($message, 'str_getcsv()')) {
+                throw new ErrorException($message, 0, $severity, $file, $line);
+            }
+
+            return false;
+        });
+
+        try {
+            $method = new ReflectionMethod(ListInventoryItems::class, 'csvRowsFromFile');
+            $rows = $method->invoke(null, $metadata['uri']);
+        } finally {
+            restore_error_handler();
+            fclose($handle);
+        }
+
+        $this->assertSame([
+            ['name', 'serial_number'],
+            ['Laptop', 'SN-1001'],
+        ], $rows);
+    }
+
+    public function test_deprecations_log_channel_is_configured(): void
+    {
+        $this->assertSame('single', config('logging.channels.deprecations.driver'));
+        $this->assertSame(storage_path('logs/php-deprecation-warnings.log'), config('logging.channels.deprecations.path'));
     }
 
     public function test_ticket_with_technical_support_users(): void

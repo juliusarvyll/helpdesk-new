@@ -6,10 +6,13 @@ use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\DatabaseNotificationResource\Pages;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\BulkAction;
+use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Notifications\DatabaseNotification;
 
 class DatabaseNotificationResource extends Resource
@@ -58,7 +61,25 @@ class DatabaseNotificationResource extends Resource
                     ->icon('heroicon-o-check')
                     ->visible(fn ($record) => $record->read_at === null)
                     ->action(fn ($record) => $record->markAsRead()),
+            ])
+            ->bulkActions([
+                BulkActionGroup::make([
+                    BulkAction::make('markSelectedAsRead')
+                        ->label('Mark selected as read')
+                        ->icon('heroicon-o-check')
+                        ->action(fn (Collection $records): mixed => $records->each->markAsRead())
+                        ->deselectRecordsAfterCompletion(),
+                ]),
             ]);
+    }
+
+    public static function markAllAsRead(): int
+    {
+        return DatabaseNotification::query()
+            ->where('notifiable_id', auth()->id())
+            ->where('notifiable_type', auth()->user()?->getMorphClass())
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
     }
 
     public static function getPages(): array

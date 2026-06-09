@@ -28,10 +28,10 @@ class ListInventoryItems extends ListRecords
                 ])
                 ->action(function (array $data) {
                     $possiblePaths = [
-                        storage_path('app/public/' . $data['file']),
-                        storage_path('app/' . $data['file']),
-                        storage_path('app/private/' . $data['file']),
-                        public_path('storage/' . $data['file']),
+                        storage_path('app/public/'.$data['file']),
+                        storage_path('app/'.$data['file']),
+                        storage_path('app/private/'.$data['file']),
+                        public_path('storage/'.$data['file']),
                     ];
 
                     $filePath = null;
@@ -46,13 +46,13 @@ class ListInventoryItems extends ListRecords
                         Notification::make()
                             ->danger()
                             ->title('File not found')
-                            ->body('Tried: ' . implode(', ', $possiblePaths))
+                            ->body('Tried: '.implode(', ', $possiblePaths))
                             ->send();
 
                         return;
                     }
 
-                    $csv = array_map('str_getcsv', file($filePath));
+                    $csv = self::csvRowsFromFile($filePath);
                     $header = array_shift($csv);
 
                     $tenant = Filament::getTenant();
@@ -96,10 +96,21 @@ class ListInventoryItems extends ListRecords
                     Notification::make()
                         ->success()
                         ->title('Import queued')
-                        ->body(count($rows) . ' items will be imported in the background.')
+                        ->body(count($rows).' items will be imported in the background.')
                         ->send();
                 }),
             Actions\CreateAction::make(),
         ];
+    }
+
+    /**
+     * @return array<int, array<int, string|null>>
+     */
+    private static function csvRowsFromFile(string $filePath): array
+    {
+        return array_map(
+            fn (string $line): array => str_getcsv($line, ',', '"', '\\'),
+            file($filePath),
+        );
     }
 }

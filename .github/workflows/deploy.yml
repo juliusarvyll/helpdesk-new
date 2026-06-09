@@ -1,0 +1,52 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-helpdesk-new
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/deploy_key -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" 'bash -se' <<'EOF'
+          set -euo pipefail
+
+          cd /home/servertest/dev/helpdesk-new
+
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+
+          docker compose up -d --build --remove-orphans
+          docker compose exec -T laravel.test composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+          docker compose exec -T laravel.test npm ci
+          docker compose exec -T laravel.test npm run build
+          docker compose exec -T laravel.test php artisan migrate --force
+          docker compose exec -T laravel.test php artisan optimize:clear
+          docker compose exec -T laravel.test php artisan config:cache
+          docker compose exec -T laravel.test php artisan route:cache
+          docker compose exec -T laravel.test php artisan view:cache
+          EOF

@@ -4,13 +4,17 @@ namespace App\Filament\Resources;
 
 use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\IssueCategoryResource\Pages;
+use App\Filament\Resources\IssueCategoryResource\RelationManagers\IssueListRelationManager;
 use App\Models\IssueCategory;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Infolists\Infolist;
 use Filament\Resources\Resource;
 use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Actions\EditAction;
+use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -30,6 +34,18 @@ class IssueCategoryResource extends Resource
     {
         return $form->schema([
             TextInput::make('name')->required(),
+        ]);
+    }
+
+    public static function infolist(Infolist $infolist): Infolist
+    {
+        return $infolist->schema([
+            TextEntry::make('name'),
+            TextEntry::make('issueList_count')
+                ->label('Issues')
+                ->state(fn (IssueCategory $record): int => $record->issueList()->count())
+                ->badge()
+                ->color('info'),
         ]);
     }
 
@@ -59,8 +75,15 @@ class IssueCategoryResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('name')
-            ->actions([EditAction::make()])
+            ->actions([ViewAction::make(), EditAction::make()])
             ->bulkActions([BulkActionGroup::make([DeleteBulkAction::make()])]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            IssueListRelationManager::class,
+        ];
     }
 
     public static function getPages(): array
@@ -68,6 +91,7 @@ class IssueCategoryResource extends Resource
         return [
             'index' => Pages\ListIssueCategories::route('/'),
             'create' => Pages\CreateIssueCategory::route('/create'),
+            'view' => Pages\ViewIssueCategory::route('/{record}'),
             'edit' => Pages\EditIssueCategory::route('/{record}/edit'),
         ];
     }

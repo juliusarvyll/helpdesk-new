@@ -88,4 +88,9 @@ class DatabaseNotificationResource extends Resource
             'index' => Pages\ListDatabaseNotifications::route('/'),
         ];
     }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 }

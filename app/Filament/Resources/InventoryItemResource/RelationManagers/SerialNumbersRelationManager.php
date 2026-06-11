@@ -9,7 +9,6 @@ use App\Models\InventoryItemSerialNumber;
 use App\Models\IssueCategory;
 use App\Models\IssueList;
 use App\Models\Location;
-use App\Models\Ticket;
 use App\Models\User;
 use App\TicketCreationService;
 use Filament\Facades\Filament;
@@ -22,6 +21,7 @@ use Filament\Tables\Actions\Action;
 use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class SerialNumbersRelationManager extends RelationManager
@@ -41,6 +41,12 @@ class SerialNumbersRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('serial_number')
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->with([
+                    'assignedToUser',
+                    'location',
+                ])
+                ->withCount('openTickets'))
             ->columns([
                 static::compactTextColumn(TextColumn::make('serial_number'), 32)
                     ->label('Serial Number')
@@ -65,7 +71,7 @@ class SerialNumbersRelationManager extends RelationManager
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('open_tickets')
                     ->label('Open Tickets')
-                    ->state(fn (InventoryItemSerialNumber $record): int => $record->openTickets()->count())
+                    ->state(fn (InventoryItemSerialNumber $record): int => static::openTicketsCount($record))
                     ->badge()
                     ->color(fn (int $state): string => $state > 0 ? 'warning' : 'gray'),
             ])
@@ -74,7 +80,7 @@ class SerialNumbersRelationManager extends RelationManager
                     ->label('Create Ticket')
                     ->icon('heroicon-o-ticket')
                     ->color('success')
-                    ->visible(fn (InventoryItemSerialNumber $record): bool => (auth()->user()?->can('create_ticket') ?? false) && ! $record->hasOpenTicket())
+                    ->visible(fn (InventoryItemSerialNumber $record): bool => (auth()->user()?->can('create_ticket') ?? false) && ! static::hasOpenTickets($record))
                     ->form([
                         TextInput::make('subject')
                             ->required()
@@ -219,5 +225,23 @@ class SerialNumbersRelationManager extends RelationManager
             $record->id,
             auth()->user(),
         );
+    }
+
+    private static function openTicketsCount(InventoryItemSerialNumber $record): int
+    {
+        if (array_key_exists('open_tickets_count', $record->getAttributes())) {
+            return (int) $record->open_tickets_count;
+        }
+
+        return $record->openTickets()->count();
+    }
+
+    private static function hasOpenTickets(InventoryItemSerialNumber $record): bool
+    {
+        if (array_key_exists('open_tickets_count', $record->getAttributes())) {
+            return (int) $record->open_tickets_count > 0;
+        }
+
+        return $record->hasOpenTicket();
     }
 }

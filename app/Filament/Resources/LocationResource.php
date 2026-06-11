@@ -6,7 +6,6 @@ use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\LocationResource\Pages;
 use App\Filament\Resources\LocationResource\RelationManagers\InventoryItemsRelationManager;
 use App\Models\Location;
-use Filament\Facades\Filament;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Form;
@@ -19,6 +18,7 @@ use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class LocationResource extends Resource
 {
@@ -102,8 +102,10 @@ class LocationResource extends Resource
         ];
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('is_deleted', false);
+        return parent::getEloquentQuery()
+            ->where('is_deleted', false)
+            ->withCount('inventoryItems');
     }
 }

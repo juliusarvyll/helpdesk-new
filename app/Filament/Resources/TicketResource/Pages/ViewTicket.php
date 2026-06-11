@@ -42,11 +42,11 @@ class ViewTicket extends ViewRecord
                         ->badge()
                         ->visible(fn (): bool => TicketResource::canManageTechnicalSupportAssignments())
                         ->listWithLineBreaks(),
-                    TextEntry::make('technicalSupportUsers')
+                    TextEntry::make('assignment_status')
                         ->label('Assignment Status')
                         ->badge()
-                        ->formatStateUsing(fn ($record): string => $record->technicalSupportUsers->pluck('name')->join(', ') ?: 'Unassigned')
-                        ->color(fn ($record): string => $record->technicalSupportUsers->count() > 0 ? 'success' : 'warning')
+                        ->state(fn ($record): string => $record->technicalSupportUsers->isNotEmpty() ? 'Assigned' : 'Not Assigned')
+                        ->color(fn ($record): string => $record->technicalSupportUsers->isNotEmpty() ? 'success' : 'warning')
                         ->visible(fn (): bool => TicketResource::canManageTechnicalSupportAssignments()),
                     TextEntry::make('client.department.name')->label('Department'),
                 ])->columns(2),

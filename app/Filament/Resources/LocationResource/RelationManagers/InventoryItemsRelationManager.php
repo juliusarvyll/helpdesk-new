@@ -7,6 +7,7 @@ use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class InventoryItemsRelationManager extends RelationManager
@@ -26,6 +27,11 @@ class InventoryItemsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('name')
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
+                'assignedToUser',
+                'category',
+                'department',
+            ]))
             ->columns([
                 static::compactTextColumn(TextColumn::make('asset_tag'), 24)
                     ->searchable()

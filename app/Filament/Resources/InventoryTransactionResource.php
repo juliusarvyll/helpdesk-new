@@ -15,6 +15,7 @@ use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class InventoryTransactionResource extends Resource
 {
@@ -157,9 +158,15 @@ class InventoryTransactionResource extends Resource
         return false;
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
+            ->with([
+                'assignedToUser',
+                'inventoryItem',
+                'ticket',
+                'user',
+            ])
             ->whereHas(
                 'inventoryItem',
                 fn ($query) => $query->where('department_id', Filament::getTenant()?->id)

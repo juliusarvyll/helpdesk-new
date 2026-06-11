@@ -14,6 +14,7 @@ services:
         environment:
             WWWUSER: '${WWWUSER}'
             LARAVEL_SAIL: 1
+            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
             SUPERVISOR_PHP_COMMAND: >-
                 /usr/bin/php -d variables_order=EGPCS /var/www/html/artisan octane:start --server=${OCTANE_SERVER:-swoole} --host=0.0.0.0 --port=80 --workers=${OCTANE_WORKERS:-4} --task-workers=${OCTANE_TASK_WORKERS:-2} --max-requests=${OCTANE_MAX_REQUESTS:-1000}
             XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
@@ -30,6 +31,7 @@ services:
         environment:
             WWWUSER: '${WWWUSER}'
             LARAVEL_SAIL: 1
+            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
             XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
             IGNITION_LOCAL_SITES_PATH: '${PWD}'
         volumes:

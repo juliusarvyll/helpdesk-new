@@ -61,7 +61,12 @@ class TicketResource extends Resource
             $query->visibleTo($user);
         }
 
-        return $query->with(['issue', 'technicalSupportUsers']);
+        return $query->with([
+            'client.department',
+            'creator',
+            'issue',
+            'technicalSupportUsers',
+        ]);
     }
 
     public static function form(Form $form): Form

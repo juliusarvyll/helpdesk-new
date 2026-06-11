@@ -13,7 +13,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy to server
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     steps:
       - name: Deploy over SSH

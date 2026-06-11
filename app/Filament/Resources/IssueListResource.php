@@ -16,6 +16,7 @@ use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class IssueListResource extends Resource
 {
@@ -30,6 +31,11 @@ class IssueListResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-o-list-bullet';
 
     protected static ?string $navigationGroup = 'Helpdesk';
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with('category');
+    }
 
     public static function form(Form $form): Form
     {
@@ -68,7 +74,7 @@ class IssueListResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
-            ->defaultSort('category.name')
+            ->defaultSort('issue_category_id')
             ->filters([
                 SelectFilter::make('issue_category_id')
                     ->label('Category')

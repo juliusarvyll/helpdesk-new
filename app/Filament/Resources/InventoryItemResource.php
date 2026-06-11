@@ -27,6 +27,7 @@ use Filament\Tables\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 class InventoryItemResource extends Resource
@@ -293,7 +294,7 @@ class InventoryItemResource extends Resource
                 Action::make('assign')
                     ->icon('heroicon-o-user-plus')
                     ->color('info')
-                    ->visible(fn (InventoryItem $record): bool => $record->serialNumbers()->doesntExist() && (auth()->user()?->can('assign', $record) ?? false))
+                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && (auth()->user()?->can('assign', $record) ?? false))
                     ->form([
                         Select::make('assigned_to_user_id')
                             ->label('Assigned To')
@@ -332,7 +333,7 @@ class InventoryItemResource extends Resource
                 Action::make('return')
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->color('gray')
-                    ->visible(fn (InventoryItem $record): bool => $record->serialNumbers()->doesntExist() && ($record->status === 'assigned') && (auth()->user()?->can('assign', $record) ?? false))
+                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && ($record->status === 'assigned') && (auth()->user()?->can('assign', $record) ?? false))
                     ->form([
                         Select::make('ticket_id')
                             ->label('Related Ticket')
@@ -356,7 +357,7 @@ class InventoryItemResource extends Resource
                 Action::make('consume')
                     ->icon('heroicon-o-minus-circle')
                     ->color('warning')
-                    ->visible(fn (InventoryItem $record): bool => $record->serialNumbers()->doesntExist() && ($record->quantity > 0) && (auth()->user()?->can('adjustStock', $record) ?? false))
+                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && ($record->quantity > 0) && (auth()->user()?->can('adjustStock', $record) ?? false))
                     ->form([
                         TextInput::make('quantity')
                             ->required()
@@ -385,7 +386,7 @@ class InventoryItemResource extends Resource
                 Action::make('transfer')
                     ->icon('heroicon-o-map-pin')
                     ->color('primary')
-                    ->visible(fn (InventoryItem $record): bool => $record->serialNumbers()->doesntExist() && (auth()->user()?->can('assign', $record) ?? false))
+                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && (auth()->user()?->can('assign', $record) ?? false))
                     ->form([
                         Select::make('location_id')
                             ->label('Location')
@@ -410,7 +411,7 @@ class InventoryItemResource extends Resource
                     ->label('Mark In Repair')
                     ->icon('heroicon-o-wrench-screwdriver')
                     ->color('warning')
-                    ->visible(fn (InventoryItem $record): bool => $record->serialNumbers()->doesntExist() && (auth()->user()?->can('update', $record) ?? false))
+                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && (auth()->user()?->can('update', $record) ?? false))
                     ->form([
                         Select::make('ticket_id')
                             ->label('Related Ticket')
@@ -435,7 +436,7 @@ class InventoryItemResource extends Resource
                     ->icon('heroicon-o-archive-box-x-mark')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->visible(fn (InventoryItem $record): bool => $record->serialNumbers()->doesntExist() && (auth()->user()?->can('retire', $record) ?? false))
+                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && (auth()->user()?->can('retire', $record) ?? false))
                     ->form([
                         Textarea::make('notes'),
                     ])
@@ -450,7 +451,7 @@ class InventoryItemResource extends Resource
                 Action::make('adjustStock')
                     ->label('Adjust Stock')
                     ->icon('heroicon-o-adjustments-horizontal')
-                    ->visible(fn (InventoryItem $record): bool => $record->serialNumbers()->doesntExist() && (auth()->user()?->can('adjustStock', $record) ?? false))
+                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && (auth()->user()?->can('adjustStock', $record) ?? false))
                     ->form([
                         TextInput::make('quantity')
                             ->label('New Quantity')
@@ -494,9 +495,26 @@ class InventoryItemResource extends Resource
         ];
     }
 
-    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('is_deleted', false);
+        return parent::getEloquentQuery()
+            ->where('is_deleted', false)
+            ->with([
+                'assignedToUser',
+                'category',
+                'department',
+                'location',
+            ])
+            ->withExists('serialNumbers');
+    }
+
+    public static function hasSerialNumbers(InventoryItem $record): bool
+    {
+        if (array_key_exists('serial_numbers_exists', $record->getAttributes())) {
+            return (bool) $record->serial_numbers_exists;
+        }
+
+        return $record->serialNumbers()->exists();
     }
 
     public static function canViewAny(): bool

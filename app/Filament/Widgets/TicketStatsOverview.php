@@ -36,7 +36,7 @@ class TicketStatsOverview extends BaseWidget
             ->count();
         $resolvedToday = $query->clone()
             ->where('status', TicketStatus::Closed)
-            ->whereDate('end_time', today())
+            ->whereBetween('end_time', [today()->startOfDay(), today()->endOfDay()])
             ->count();
         $createdThisWeek = $query->clone()
             ->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()])
@@ -138,14 +138,14 @@ class TicketStatsOverview extends BaseWidget
             ->where('status', TicketStatus::Closed)
             ->whereNotNull('start_time')
             ->whereNotNull('end_time')
-            ->get(['start_time', 'end_time'])
-            ->map(fn (Ticket $ticket): float => $ticket->start_time->diffInMinutes($ticket->end_time));
+            ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, start_time, end_time)) as average_minutes')
+            ->value('average_minutes');
 
-        if ($durations->isEmpty()) {
+        if ($durations === null) {
             return 0.0;
         }
 
-        return round($durations->average() / 60, 1);
+        return round(((float) $durations) / 60, 1);
     }
 
     public static function formatHours(float $hours): string
@@ -170,7 +170,9 @@ class TicketStatsOverview extends BaseWidget
             ->map(function (int $daysAgo) use ($query, $dateColumn): int {
                 $date = today()->subDays($daysAgo);
 
-                return $query->clone()->whereDate($dateColumn, $date)->count();
+                return $query->clone()
+                    ->whereBetween($dateColumn, [$date->copy()->startOfDay(), $date->copy()->endOfDay()])
+                    ->count();
             })
             ->all();
     }

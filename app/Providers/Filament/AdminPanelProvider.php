@@ -38,6 +38,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->tenant(Department::class)
             ->tenantRoutePrefix('department')
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('15s')
             ->userMenuItems([
                 'profile' => MenuItem::make()
                     ->label('My Profile')

@@ -18,6 +18,8 @@ class TicketReports extends Page implements HasForms
 {
     use InteractsWithForms;
 
+    private const ALL_DEPARTMENTS = 'all';
+
     protected static ?string $navigationIcon = 'heroicon-o-document-chart-bar';
 
     protected static ?string $navigationGroup = 'Helpdesk';
@@ -40,7 +42,9 @@ class TicketReports extends Page implements HasForms
         $this->form->fill([
             'status' => [],
             'priority' => [],
-            'department_id' => Filament::getTenant()?->id,
+            'department_id' => $this->canReportAcrossDepartments()
+                ? self::ALL_DEPARTMENTS
+                : Filament::getTenant()?->id,
         ]);
     }
 
@@ -117,18 +121,19 @@ class TicketReports extends Page implements HasForms
     }
 
     /**
-     * @return array<int, string>
+     * @return array<int|string, string>
      */
     public function departmentOptions(): array
     {
         $user = auth()->user();
 
-        if ($user?->hasRole('super_admin')) {
-            return Department::query()
-                ->where('is_deleted', 0)
-                ->orderBy('name')
-                ->pluck('name', 'id')
-                ->all();
+        if ($this->canReportAcrossDepartments()) {
+            return [self::ALL_DEPARTMENTS => 'All Departments']
+                + Department::query()
+                    ->where('is_deleted', 0)
+                    ->orderBy('name')
+                    ->pluck('name', 'id')
+                    ->all();
         }
 
         return $user?->departments()
@@ -136,6 +141,11 @@ class TicketReports extends Page implements HasForms
             ->orderBy('department.name')
             ->pluck('department.name', 'department.id')
             ->all() ?? [];
+    }
+
+    private function canReportAcrossDepartments(): bool
+    {
+        return auth()->user()?->hasAnyRole(['super_admin', 'technical_support']) ?? false;
     }
 
     /**

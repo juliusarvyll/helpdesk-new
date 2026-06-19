@@ -3,15 +3,15 @@
 namespace App\Filament\Pages;
 
 use Filament\Facades\Filament;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Schema as SchemaFacade;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
@@ -20,9 +20,9 @@ class MyProfile extends Page implements HasForms
 {
     use InteractsWithForms;
 
-    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-user-circle';
 
-    protected static ?string $navigationGroup = 'Account';
+    protected static string|\UnitEnum|null $navigationGroup = 'Account';
 
     protected static ?string $navigationLabel = 'My Profile';
 
@@ -30,7 +30,7 @@ class MyProfile extends Page implements HasForms
 
     protected static ?string $slug = 'my-profile';
 
-    protected static string $view = 'filament.pages.my-profile';
+    protected string $view = 'filament.pages.my-profile';
 
     /**
      * @var array<string, mixed>|null
@@ -55,12 +55,18 @@ class MyProfile extends Page implements HasForms
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->canAccessPanel(Filament::getCurrentPanel()) ?? false;
+        $panel = Filament::getCurrentPanel();
+
+        if (! $panel) {
+            return auth()->check();
+        }
+
+        return auth()->user()?->canAccessPanel($panel) ?? false;
     }
 
-    public function form(Form $form): Form
+    public function form(Schema $schema): Schema
     {
-        return $form
+        return $schema
             ->schema([
                 Section::make('Profile Information')
                     ->schema([
@@ -171,6 +177,6 @@ class MyProfile extends Page implements HasForms
 
     private function hasUserColumn(string $column): bool
     {
-        return Schema::hasColumn('users', $column);
+        return SchemaFacade::hasColumn('users', $column);
     }
 }

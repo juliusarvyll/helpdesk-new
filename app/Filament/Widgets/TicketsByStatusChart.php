@@ -8,7 +8,7 @@ use Filament\Widgets\ChartWidget;
 
 class TicketsByStatusChart extends ChartWidget
 {
-    protected static ?string $heading = 'Tickets by Status';
+    protected ?string $heading = 'Tickets by Status';
 
     protected function getData(): array
     {

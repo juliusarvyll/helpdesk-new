@@ -6,13 +6,13 @@ use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\IssueListResource\Pages;
 use App\Models\IssueCategory;
 use App\Models\IssueList;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Tables\Actions\DeleteBulkAction;
-use Filament\Tables\Actions\EditAction;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -28,18 +28,18 @@ class IssueListResource extends Resource
 
     protected static ?string $tenantOwnershipRelationshipName = null;
 
-    protected static ?string $navigationIcon = 'heroicon-o-list-bullet';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-list-bullet';
 
-    protected static ?string $navigationGroup = 'Helpdesk';
+    protected static string|\UnitEnum|null $navigationGroup = 'Helpdesk';
 
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with('category');
     }
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form->schema([
+        return $schema->schema([
             Select::make('issue_category_id')
                 ->label('Category')
                 ->options(IssueCategory::pluck('name', 'id'))

@@ -34,5 +34,13 @@ class InventoryPermissionsSeeder extends Seeder
 
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web'])->givePermissionTo($permissions);
         Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web'])->givePermissionTo($permissions);
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web'])->givePermissionTo([
+            'view_any_inventory::item',
+            'view_inventory::item',
+            'update_inventory::item',
+            'assign_inventory_item',
+            'adjust_stock_inventory_item',
+            'retire_inventory_item',
+        ]);
     }
 }

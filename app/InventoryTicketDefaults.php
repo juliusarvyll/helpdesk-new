@@ -45,7 +45,7 @@ class InventoryTicketDefaults
             "Item: {$inventoryItem->name}",
             $inventoryItem->asset_tag ? "Asset Tag: {$inventoryItem->asset_tag}" : null,
             $serialNumber ? "Serial Number: {$serialNumber->serial_number}" : null,
-            $this->locationName($inventoryItem, $serialNumber) ? "Location: {$this->locationName($inventoryItem, $serialNumber)}" : null,
+            $this->locationName($serialNumber) ? "Location: {$this->locationName($serialNumber)}" : null,
             $inventoryItem->assignedToUser?->name ? "Assigned To: {$inventoryItem->assignedToUser->name}" : null,
             '',
             'Issue Details:',
@@ -64,9 +64,8 @@ class InventoryTicketDefaults
             ->first();
     }
 
-    private function locationName(InventoryItem $inventoryItem, ?InventoryItemSerialNumber $serialNumber): ?string
+    private function locationName(?InventoryItemSerialNumber $serialNumber): ?string
     {
-        return $serialNumber?->location?->name
-            ?? $inventoryItem->location?->name;
+        return $serialNumber?->location?->name;
     }
 }

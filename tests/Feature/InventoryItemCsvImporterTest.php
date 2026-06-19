@@ -76,6 +76,39 @@ class InventoryItemCsvImporterTest extends TestCase
         $this->assertEquals('Main Office', $serialNumber->location->name);
     }
 
+    public function test_import_can_assign_multiple_serial_numbers_to_matching_locations(): void
+    {
+        $actor = User::factory()->create();
+        $tenant = Department::factory()->create();
+        $category = InventoryCategory::factory()->create();
+
+        $item = app(InventoryItemCsvImporter::class)->import([
+            'inventory_category_id' => $category->id,
+            'asset_tag' => 'AST-1001-MULTI-LOC',
+            'name' => 'Laptop Lab Set',
+            'description' => '',
+            'status' => 'available',
+            'quantity' => '2',
+            'unit' => 'units',
+            'location' => 'Main Office; Storage Room',
+            'assigned_to_user_id' => '',
+            'metadata' => '',
+            'purchased_at' => '',
+            'warranty_expires_at' => '',
+            'serial_number' => 'SN-1001-A; SN-1001-B',
+        ], $tenant, $actor);
+
+        $serialNumbers = $item->serialNumbers()
+            ->with('location')
+            ->orderBy('serial_number')
+            ->get();
+
+        $this->assertNull($item->location_id);
+        $this->assertSame(2, $item->quantity);
+        $this->assertEquals(['SN-1001-A', 'SN-1001-B'], $serialNumbers->pluck('serial_number')->all());
+        $this->assertEquals(['Main Office', 'Storage Room'], $serialNumbers->pluck('location.name')->all());
+    }
+
     public function test_import_can_auto_assign_multiple_serial_numbers_from_one_row(): void
     {
         $actor = User::factory()->create();
@@ -166,7 +199,7 @@ class InventoryItemCsvImporterTest extends TestCase
 
         $this->assertEquals($item->id, $importedItem->id);
         $this->assertEquals('Padlock', $item->name);
-        $this->assertEquals(10, $item->quantity);
+        $this->assertEquals(1, $item->quantity);
         $this->assertDatabaseCount('inventory_items', 1);
         $this->assertDatabaseHas('inventory_item_serial_numbers', [
             'inventory_item_id' => $item->id,

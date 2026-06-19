@@ -19,7 +19,6 @@ class InventoryItem extends Model
         'status',
         'quantity',
         'unit',
-        'location_id',
         'assigned_to_user_id',
         'department_id',
         'current_ticket_id',
@@ -55,11 +54,6 @@ class InventoryItem extends Model
         return $this->belongsTo(Department::class);
     }
 
-    public function location(): BelongsTo
-    {
-        return $this->belongsTo(Location::class);
-    }
-
     public function currentTicket(): BelongsTo
     {
         return $this->belongsTo(Ticket::class, 'current_ticket_id');
@@ -82,12 +76,40 @@ class InventoryItem extends Model
 
     public function syncQuantityFromSerialNumbers(): void
     {
-        $quantity = $this->serialNumbers()->count();
+        $this->syncFromSerialNumbers();
+    }
 
-        if ($this->quantity === $quantity) {
+    public function syncFromSerialNumbers(): void
+    {
+        $quantity = $this->serialNumbers()->count();
+        $status = $this->statusFromSerialNumbers();
+
+        if ($this->quantity === $quantity && $this->status === $status) {
             return;
         }
 
-        $this->forceFill(['quantity' => $quantity])->save();
+        $this->forceFill([
+            'quantity' => $quantity,
+            'status' => $status,
+        ])->save();
+    }
+
+    private function statusFromSerialNumbers(): string
+    {
+        $statuses = $this->serialNumbers()
+            ->pluck('status')
+            ->all();
+
+        if ($statuses === []) {
+            return 'available';
+        }
+
+        foreach (['assigned', 'in_repair', 'lost', 'disposed', 'retired'] as $status) {
+            if (in_array($status, $statuses, true)) {
+                return $status;
+            }
+        }
+
+        return 'available';
     }
 }

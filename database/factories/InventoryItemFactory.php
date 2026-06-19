@@ -21,7 +21,6 @@ class InventoryItemFactory extends Factory
             'status' => 'available',
             'quantity' => 1,
             'unit' => null,
-            'location_id' => null,
             'assigned_to_user_id' => null,
             'department_id' => null,
             'current_ticket_id' => null,

@@ -30,8 +30,9 @@ class Location extends Model
         return $this->belongsTo(Department::class);
     }
 
-    public function inventoryItems(): HasMany
+    public function inventoryItemSerialNumbers(): HasMany
     {
-        return $this->hasMany(InventoryItem::class)->where('is_deleted', false);
+        return $this->hasMany(InventoryItemSerialNumber::class)
+            ->whereHas('inventoryItem', fn ($query) => $query->where('is_deleted', false));
     }
 }

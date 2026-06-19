@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\TicketStatus;
 use App\Notifications\TicketStatusChanged;
+use App\TicketStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -109,7 +109,7 @@ class Ticket extends Model
             return false;
         }
 
-        if ($newStatus === TicketStatus::Closed && blank($this->technical_support_remarks)) {
+        if ($newStatus === TicketStatus::Closed && (blank($this->issue_id) || blank($this->technical_support_remarks))) {
             return false;
         }
 

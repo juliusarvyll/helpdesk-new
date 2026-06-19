@@ -7,12 +7,12 @@ use App\Models\User;
 use App\TicketStatus;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Form;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
 
 class TicketReports extends Page implements HasForms
 {
@@ -20,9 +20,9 @@ class TicketReports extends Page implements HasForms
 
     private const ALL_DEPARTMENTS = 'all';
 
-    protected static ?string $navigationIcon = 'heroicon-o-document-chart-bar';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-chart-bar';
 
-    protected static ?string $navigationGroup = 'Helpdesk';
+    protected static string|\UnitEnum|null $navigationGroup = 'Helpdesk';
 
     protected static ?string $navigationLabel = 'Reports';
 
@@ -30,7 +30,7 @@ class TicketReports extends Page implements HasForms
 
     protected static ?string $slug = 'ticket-reports';
 
-    protected static string $view = 'filament.pages.ticket-reports';
+    protected string $view = 'filament.pages.ticket-reports';
 
     /**
      * @var array<string, mixed>|null
@@ -53,9 +53,9 @@ class TicketReports extends Page implements HasForms
         return auth()->user()?->canAccessPanel(Filament::getCurrentPanel()) ?? false;
     }
 
-    public function form(Form $form): Form
+    public function form(Schema $schema): Schema
     {
-        return $form
+        return $schema
             ->schema([
                 Section::make('PDF Report Maker')
                     ->schema([

@@ -1,11 +1,15 @@
 {
     "agents": [
-        "codex"
+        "codex",
+        "kiro"
     ],
     "cloud": false,
     "guidelines": true,
     "mcp": true,
     "nightwatch": false,
+    "packages": [
+        "filament/filament"
+    ],
     "sail": true,
     "skills": [
         "laravel-best-practices"

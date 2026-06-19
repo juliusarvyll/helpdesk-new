@@ -14,9 +14,9 @@ class InventoryItemsRelationManager extends RelationManager
 {
     use HasCompactTableColumns;
 
-    protected static string $relationship = 'inventoryItems';
+    protected static string $relationship = 'inventoryItemSerialNumbers';
 
-    protected static ?string $title = 'Items In This Location';
+    protected static ?string $title = 'Serial Numbers In This Location';
 
     public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
     {
@@ -26,20 +26,26 @@ class InventoryItemsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
-            ->recordTitleAttribute('name')
+            ->recordTitleAttribute('serial_number')
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
+                'inventoryItem.assignedToUser',
+                'inventoryItem.category',
+                'inventoryItem.department',
                 'assignedToUser',
-                'category',
-                'department',
             ]))
             ->columns([
-                static::compactTextColumn(TextColumn::make('asset_tag'), 24)
+                static::compactTextColumn(TextColumn::make('serial_number'), 28)
                     ->searchable()
                     ->sortable(),
-                static::compactTextColumn(TextColumn::make('name'), 32)
+                static::compactTextColumn(TextColumn::make('inventoryItem.asset_tag'), 24)
+                    ->label('Asset Tag')
                     ->searchable()
                     ->sortable(),
-                static::compactTextColumn(TextColumn::make('category.name'), 28)
+                static::compactTextColumn(TextColumn::make('inventoryItem.name'), 32)
+                    ->label('Item')
+                    ->searchable()
+                    ->sortable(),
+                static::compactTextColumn(TextColumn::make('inventoryItem.category.name'), 28)
                     ->label('Category')
                     ->searchable()
                     ->sortable()
@@ -52,17 +58,16 @@ class InventoryItemsRelationManager extends RelationManager
                         'in_repair' => 'warning',
                         'retired', 'lost', 'disposed' => 'danger',
                     }),
-                TextColumn::make('quantity')
-                    ->numeric()
-                    ->sortable(),
                 static::compactTextColumn(TextColumn::make('assignedToUser.name'), 28)
                     ->label('Assigned To')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                static::compactTextColumn(TextColumn::make('department.name'), 28)
+                static::compactTextColumn(TextColumn::make('inventoryItem.department.name'), 28)
+                    ->label('Department')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('warranty_expires_at')
+                TextColumn::make('inventoryItem.warranty_expires_at')
+                    ->label('Warranty Expires')
                     ->date()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),

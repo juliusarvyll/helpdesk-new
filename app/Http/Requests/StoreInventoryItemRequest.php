@@ -22,7 +22,6 @@ class StoreInventoryItemRequest extends FormRequest
             'status' => ['required', Rule::in(['available', 'assigned', 'in_repair', 'retired', 'lost', 'disposed'])],
             'quantity' => ['required', 'integer', 'min:0'],
             'unit' => ['nullable', 'string', 'max:255'],
-            'location_id' => ['nullable', 'exists:locations,id'],
             'assigned_to_user_id' => ['nullable', 'exists:users,id'],
             'department_id' => ['nullable', 'exists:department,id'],
             'metadata' => ['nullable', 'array'],

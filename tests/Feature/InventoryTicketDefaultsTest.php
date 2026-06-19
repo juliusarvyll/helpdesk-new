@@ -72,13 +72,13 @@ class InventoryTicketDefaultsTest extends TestCase
         $item = InventoryItem::factory()->create([
             'asset_tag' => 'AST-9001',
             'name' => 'Dell Latitude',
-            'location_id' => $location->id,
             'assigned_to_user_id' => $assignedUser->id,
         ]);
         $serialNumber = InventoryItemSerialNumber::create([
             'inventory_item_id' => $item->id,
             'serial_number' => 'SN-9001',
             'status' => 'assigned',
+            'location_id' => $location->id,
         ]);
 
         $defaults = app(InventoryTicketDefaults::class);
@@ -90,15 +90,15 @@ class InventoryTicketDefaultsTest extends TestCase
         $this->assertStringContainsString('Assigned To: Maria Santos', $defaults->description($item, $serialNumber->id));
     }
 
-    public function test_it_prefers_serial_number_location_for_description(): void
+    public function test_it_uses_only_serial_number_location_for_description(): void
     {
         $itemLocation = Location::factory()->create(['name' => 'Item Office']);
         $serialLocation = Location::factory()->create(['name' => 'Serial Office']);
         $item = InventoryItem::factory()->create([
             'asset_tag' => 'AST-9002',
             'name' => 'Dell Latitude',
-            'location_id' => $itemLocation->id,
         ]);
+        $item->forceFill(['location_id' => $itemLocation->id])->save();
         $serialNumber = InventoryItemSerialNumber::create([
             'inventory_item_id' => $item->id,
             'serial_number' => 'SN-9002',

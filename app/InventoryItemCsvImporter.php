@@ -10,6 +10,7 @@ use App\Models\InventoryItemSerialNumber;
 use App\Models\InventoryTransaction;
 use App\Models\Location;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -29,9 +30,9 @@ class InventoryItemCsvImporter
             $status = filled($rowData['status'] ?? null)
                 ? (string) $rowData['status']
                 : ($assignedToUserId ? 'assigned' : 'available');
-            $locationId = $this->locationId($rowData, $tenant);
             $categoryId = $this->categoryId($rowData, $tenant);
             $serialNumbers = $this->serialNumbers($rowData);
+            $serialLocationIds = $this->serialLocationIds($rowData, $tenant, $serialNumbers);
 
             $attributes = [
                 'inventory_category_id' => $categoryId,
@@ -40,7 +41,7 @@ class InventoryItemCsvImporter
                 'status' => $status,
                 'quantity' => $this->quantity($rowData, $serialNumbers),
                 'unit' => ($rowData['unit'] ?? '') ?: null,
-                'location_id' => $serialNumbers === [] ? $locationId : null,
+                'location_id' => null,
                 'assigned_to_user_id' => $assignedToUserId,
                 'department_id' => $tenant?->id,
                 'metadata' => $this->metadata($rowData),
@@ -49,23 +50,27 @@ class InventoryItemCsvImporter
             ];
 
             $item = $this->inventoryItem($rowData, $attributes);
+            $transactionType = $item->wasRecentlyCreated ? 'created' : 'adjusted';
+            $transactionNotes = $item->wasRecentlyCreated ? 'Imported from CSV.' : 'Updated from CSV import.';
+
+            foreach ($serialNumbers as $index => $serialNumber) {
+                $this->upsertSerialNumber($item, $serialNumber, $status, $assignedToUserId, $serialLocationIds[$index] ?? null);
+            }
+
+            $item->refresh();
 
             InventoryTransaction::create([
                 'inventory_item_id' => $item->id,
                 'ticket_id' => null,
                 'user_id' => $actor->id,
                 'assigned_to_user_id' => $item->assigned_to_user_id,
-                'type' => $item->wasRecentlyCreated ? 'created' : 'adjusted',
+                'type' => $transactionType,
                 'quantity' => $item->quantity,
                 'from_status' => null,
                 'to_status' => $item->status,
-                'notes' => $item->wasRecentlyCreated ? 'Imported from CSV.' : 'Updated from CSV import.',
+                'notes' => $transactionNotes,
                 'metadata' => null,
             ]);
-
-            foreach ($serialNumbers as $serialNumber) {
-                $this->upsertSerialNumber($item, $serialNumber, $status, $assignedToUserId, $locationId);
-            }
 
             return $item;
         });
@@ -190,18 +195,11 @@ class InventoryItemCsvImporter
         return $type;
     }
 
-    /**
-     * @param  array<string, mixed>  $rowData
-     */
-    private function locationId(array $rowData, ?Department $tenant): ?int
+    private function locationIdFromName(string $name, ?Department $tenant): int
     {
-        if (blank($rowData['location'] ?? null)) {
-            return null;
-        }
-
         return Location::firstOrCreate(
             [
-                'name' => $rowData['location'],
+                'name' => trim($name),
                 'department_id' => $tenant?->id,
             ],
             ['is_deleted' => false]
@@ -237,14 +235,65 @@ class InventoryItemCsvImporter
             return [];
         }
 
-        return Str::of((string) $rowData['serial_number'])
-            ->replace(["\r\n", "\r", "\n", ';', '|'], ',')
-            ->explode(',')
-            ->map(fn (string $serialNumber): string => trim($serialNumber))
-            ->filter()
+        return $this->delimitedValues((string) $rowData['serial_number'], splitCommas: true)
             ->unique()
-            ->values()
             ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $rowData
+     * @param  array<int, string>  $serialNumbers
+     * @return array<int, int|null>
+     */
+    private function serialLocationIds(array $rowData, ?Department $tenant, array $serialNumbers): array
+    {
+        if ($serialNumbers === []) {
+            return [];
+        }
+
+        if (blank($rowData['location'] ?? null)) {
+            return array_fill(0, count($serialNumbers), null);
+        }
+
+        $rawLocation = (string) $rowData['location'];
+        $locations = $this->delimitedValues($rawLocation, splitCommas: false);
+
+        if (count($locations) === 1 && str_contains($rawLocation, ',')) {
+            $commaLocations = $this->delimitedValues($rawLocation, splitCommas: true);
+
+            if (count($commaLocations) === count($serialNumbers)) {
+                $locations = $commaLocations;
+            }
+        }
+
+        if (count($locations) === count($serialNumbers)) {
+            return collect($locations)
+                ->map(fn (string $location): int => $this->locationIdFromName($location, $tenant))
+                ->all();
+        }
+
+        $locationId = $this->locationIdFromName($rawLocation, $tenant);
+
+        return array_fill(0, count($serialNumbers), $locationId);
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    private function delimitedValues(string $value, bool $splitCommas): Collection
+    {
+        $delimiters = ["\r\n", "\r", "\n", ';', '|'];
+
+        if ($splitCommas) {
+            $delimiters[] = ',';
+        }
+
+        return Str::of($value)
+            ->replace($delimiters, ',')
+            ->explode(',')
+            ->map(fn (string $value): string => trim($value))
+            ->filter()
+            ->values();
     }
 
     /**

@@ -6,7 +6,7 @@ use App\Filament\Resources\AzureAccountProvisioningResource;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Support\Enums\MaxWidth;
+use Filament\Support\Enums\Width;
 use Illuminate\Support\HtmlString;
 
 class EditAzureAccountProvisioning extends EditRecord
@@ -44,7 +44,7 @@ class EditAzureAccountProvisioning extends EditRecord
             ->modalHeading('Azure Account Credentials')
             ->modalDescription('Copy these credentials now. The generated password is shown only once after provisioning.')
             ->modalIcon('heroicon-o-key')
-            ->modalWidth(MaxWidth::Large)
+            ->modalWidth(Width::Large)
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Done')
             ->modalContent(fn (): HtmlString => new HtmlString($this->credentialsModalHtml()));

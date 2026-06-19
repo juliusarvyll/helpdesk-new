@@ -7,7 +7,7 @@ use App\Models\FailedJob;
 use App\Models\QueueJob;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
-use Filament\Support\Enums\MaxWidth;
+use Filament\Support\Enums\Width;
 use Illuminate\Support\HtmlString;
 use Symfony\Component\Process\Process;
 
@@ -24,7 +24,7 @@ class ListQueueJobs extends ListRecords
                 ->modalHeading('Queue Worker Status')
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel('Close')
-                ->modalWidth(MaxWidth::ThreeExtraLarge)
+                ->modalWidth(Width::ThreeExtraLarge)
                 ->modalContent(fn (): HtmlString => new HtmlString($this->workerStatusHtml())),
         ];
     }

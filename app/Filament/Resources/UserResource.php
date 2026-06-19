@@ -4,14 +4,16 @@ namespace App\Filament\Resources;
 
 use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\UserResource\Pages;
+use App\Models\Department;
+use App\Models\Position;
 use App\Models\User;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Tables\Actions\DeleteBulkAction;
-use Filament\Tables\Actions\EditAction;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -28,13 +30,13 @@ class UserResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-    protected static ?string $navigationIcon = 'heroicon-o-users';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationGroup = 'Administration';
+    protected static string|\UnitEnum|null $navigationGroup = 'Administration';
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form->schema([
+        return $schema->schema([
             TextInput::make('name')->required(),
             TextInput::make('username')->required(),
             TextInput::make('email')->email()->required(),
@@ -45,7 +47,7 @@ class UserResource extends Resource
             TextInput::make('contact'),
             Select::make('department_id')
                 ->label('Primary Department')
-                ->relationship('department', 'name', fn ($query) => $query->where('department.is_deleted', 0))
+                ->options(fn (): array => static::departmentOptions())
                 ->searchable()
                 ->preload()
                 ->required(),
@@ -57,7 +59,7 @@ class UserResource extends Resource
                 ->preload()
                 ->helperText('Controls which department workspaces this user can access. The primary department is always included.'),
             Select::make('position_id')
-                ->relationship('position', 'name', fn ($query) => $query->where('is_deleted', 0))
+                ->options(fn (): array => static::positionOptions())
                 ->searchable()
                 ->preload(),
             Select::make('roles')
@@ -129,7 +131,7 @@ class UserResource extends Resource
                 SelectFilter::make('status')
                     ->options([1 => 'Active', 0 => 'Inactive']),
                 SelectFilter::make('department_id')
-                    ->relationship('department', 'name', fn ($query) => $query->where('department.is_deleted', 0))
+                    ->options(fn (): array => static::departmentOptions())
                     ->searchable()
                     ->preload(),
             ])
@@ -144,6 +146,30 @@ class UserResource extends Resource
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function departmentOptions(): array
+    {
+        return Department::query()
+            ->where('is_deleted', 0)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function positionOptions(): array
+    {
+        return Position::query()
+            ->where('is_deleted', 0)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 
     public static function syncPrimaryDepartmentTenant(User $user): void

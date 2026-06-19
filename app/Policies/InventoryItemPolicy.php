@@ -17,10 +17,6 @@ class InventoryItemPolicy
 
     public function view(User $user, InventoryItem $inventoryItem): bool
     {
-        if ($user->hasRole('client')) {
-            return $user->can('view_inventory::item') && $inventoryItem->assigned_to_user_id === $user->id;
-        }
-
         return $user->can('view_inventory::item');
     }
 

@@ -3,15 +3,22 @@
 namespace Tests\Feature;
 
 use App\Filament\Resources\InventoryItemResource;
+use App\Filament\Resources\InventoryItemResource\Pages\CreateInventoryItem;
+use App\Filament\Resources\InventoryItemResource\Pages\EditInventoryItem;
+use App\Filament\Resources\InventoryItemResource\Pages\ViewInventoryItem;
 use App\Filament\Resources\InventoryItemResource\RelationManagers\SerialNumbersRelationManager;
 use App\InventoryMovementService;
 use App\Models\Department;
 use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\InventoryItemSerialNumber;
+use App\Models\Location;
 use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
+use Spatie\Permission\Models\Role as PermissionRole;
 use Tests\TestCase;
 
 class InventoryItemTest extends TestCase
@@ -76,6 +83,7 @@ class InventoryItemTest extends TestCase
     {
         $item = InventoryItem::factory()->create([
             'quantity' => 0,
+            'status' => 'available',
         ]);
 
         InventoryItemSerialNumber::create([
@@ -86,15 +94,23 @@ class InventoryItemTest extends TestCase
 
         $item->refresh();
         $this->assertSame(1, $item->quantity);
+        $this->assertSame('available', $item->status);
 
-        InventoryItemSerialNumber::create([
+        $assignedSerialNumber = InventoryItemSerialNumber::create([
             'inventory_item_id' => $item->id,
             'serial_number' => 'SN-2',
-            'status' => 'available',
+            'status' => 'assigned',
         ]);
 
         $item->refresh();
         $this->assertSame(2, $item->quantity);
+        $this->assertSame('assigned', $item->status);
+
+        $assignedSerialNumber->update(['status' => 'in_repair']);
+
+        $item->refresh();
+        $this->assertSame(2, $item->quantity);
+        $this->assertSame('in_repair', $item->status);
     }
 
     public function test_inventory_item_quantity_updates_when_serial_number_moves_between_items(): void
@@ -165,6 +181,146 @@ class InventoryItemTest extends TestCase
         );
     }
 
+    public function test_inventory_item_can_be_created_with_serial_numbers(): void
+    {
+        $department = Department::factory()->create();
+        $category = InventoryCategory::factory()->create(['department_id' => $department->id]);
+        $location = Location::factory()->create(['department_id' => $department->id]);
+        $assignedUser = User::factory()->create([
+            'department_id' => $department->id,
+            'status' => 1,
+            'is_deleted' => 0,
+        ]);
+        $actor = $this->panelUser($department);
+
+        Filament::setTenant($department, isQuiet: true);
+
+        Livewire::actingAs($actor)
+            ->test(CreateInventoryItem::class)
+            ->set('data.inventory_category_id', $category->id)
+            ->set('data.asset_tag', 'AST-SERIAL-CREATE')
+            ->set('data.name', 'Serialized Laptop')
+            ->set('data.quantity', 1)
+            ->set('data.serialNumbers', [
+                [
+                    'serial_number' => 'SN-CREATE-001',
+                    'status' => 'available',
+                    'location_id' => $location->id,
+                    'assigned_to_user_id' => null,
+                ],
+                [
+                    'serial_number' => 'SN-CREATE-002',
+                    'status' => 'assigned',
+                    'location_id' => $location->id,
+                    'assigned_to_user_id' => $assignedUser->id,
+                ],
+            ])
+            ->call('create')
+            ->assertHasNoErrors();
+
+        $item = InventoryItem::query()
+            ->where('asset_tag', 'AST-SERIAL-CREATE')
+            ->firstOrFail();
+
+        $this->assertSame(2, $item->quantity);
+        $this->assertSame('assigned', $item->status);
+        $this->assertSame($department->id, $item->department_id);
+        $this->assertDatabaseHas('inventory_item_serial_numbers', [
+            'inventory_item_id' => $item->id,
+            'serial_number' => 'SN-CREATE-001',
+            'status' => 'available',
+            'location_id' => $location->id,
+            'assigned_to_user_id' => null,
+        ]);
+        $this->assertDatabaseHas('inventory_item_serial_numbers', [
+            'inventory_item_id' => $item->id,
+            'serial_number' => 'SN-CREATE-002',
+            'status' => 'assigned',
+            'location_id' => $location->id,
+            'assigned_to_user_id' => $assignedUser->id,
+        ]);
+    }
+
+    public function test_serial_numbers_form_field_is_only_visible_when_creating_inventory_items(): void
+    {
+        $department = Department::factory()->create();
+        $category = InventoryCategory::factory()->create(['department_id' => $department->id]);
+        $actor = $this->panelUser($department);
+        $item = InventoryItem::factory()->create([
+            'inventory_category_id' => $category->id,
+            'department_id' => $department->id,
+        ]);
+
+        Filament::setTenant($department, isQuiet: true);
+
+        Livewire::actingAs($actor)
+            ->test(CreateInventoryItem::class)
+            ->assertSchemaComponentVisible('serialNumbers');
+
+        Livewire::actingAs($actor)
+            ->test(EditInventoryItem::class, ['record' => $item->getRouteKey()])
+            ->assertSchemaComponentHidden('serialNumbers');
+
+        Livewire::actingAs($actor)
+            ->test(ViewInventoryItem::class, ['record' => $item->getRouteKey()])
+            ->assertSchemaComponentHidden('serialNumbers');
+    }
+
+    public function test_serialized_inventory_item_header_actions_remain_visible(): void
+    {
+        $department = Department::factory()->create();
+        $category = InventoryCategory::factory()->create(['department_id' => $department->id]);
+        $assignedUser = User::factory()->create([
+            'department_id' => $department->id,
+            'status' => 1,
+            'is_deleted' => 0,
+        ]);
+        $actor = $this->panelUser($department);
+        $item = InventoryItem::factory()->create([
+            'inventory_category_id' => $category->id,
+            'department_id' => $department->id,
+            'quantity' => 0,
+            'status' => 'available',
+        ]);
+        $serialNumber = InventoryItemSerialNumber::create([
+            'inventory_item_id' => $item->id,
+            'serial_number' => 'SN-ACTION-001',
+            'status' => 'available',
+        ]);
+
+        Filament::setTenant($department, isQuiet: true);
+
+        Livewire::actingAs($actor)
+            ->test(ViewInventoryItem::class, ['record' => $item->getRouteKey()])
+            ->assertActionVisible('createTicket')
+            ->assertActionVisible('assign')
+            ->assertActionVisible('transfer')
+            ->assertActionVisible('repair')
+            ->assertActionVisible('retire')
+            ->assertActionHidden('adjustStock')
+            ->callAction('assign', [
+                'inventory_item_serial_number_id' => $serialNumber->id,
+                'assigned_to_user_id' => $assignedUser->id,
+                'ticket_id' => null,
+                'notes' => 'Issued by serial action',
+            ])
+            ->assertHasNoErrors();
+
+        $serialNumber->refresh();
+        $item->refresh();
+
+        $this->assertSame('assigned', $serialNumber->status);
+        $this->assertSame($assignedUser->id, $serialNumber->assigned_to_user_id);
+        $this->assertSame('assigned', $item->status);
+        $this->assertDatabaseHas('inventory_transactions', [
+            'inventory_item_id' => $item->id,
+            'type' => 'assigned',
+            'from_status' => 'available',
+            'to_status' => 'assigned',
+            'notes' => 'Issued by serial action',
+        ]);
+    }
+
     public function test_assigning_inventory_item_updates_state_and_records_transaction(): void
     {
         $actor = User::factory()->create();
@@ -204,6 +360,21 @@ class InventoryItemTest extends TestCase
             'type' => 'consumed',
             'quantity' => 4,
         ]);
+    }
+
+    private function panelUser(Department $department): User
+    {
+        PermissionRole::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+
+        $user = User::factory()->create([
+            'department_id' => $department->id,
+            'status' => 1,
+            'is_deleted' => 0,
+        ]);
+        $user->assignRole('super_admin');
+        $user->departments()->attach($department);
+
+        return $user;
     }
 
     public function test_consuming_more_than_available_stock_fails(): void

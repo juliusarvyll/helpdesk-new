@@ -11,14 +11,15 @@ use App\Models\IssueList;
 use App\Models\Location;
 use App\Models\User;
 use App\TicketCreationService;
+use Filament\Actions\Action;
+use Filament\Actions\CreateAction;
+use Filament\Actions\EditAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Get;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables\Actions\Action;
-use Filament\Tables\Actions\EditAction;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -75,6 +76,48 @@ class SerialNumbersRelationManager extends RelationManager
                     ->badge()
                     ->color(fn (int $state): string => $state > 0 ? 'warning' : 'gray'),
             ])
+            ->headerActions([
+                CreateAction::make()
+                    ->form([
+                        TextInput::make('serial_number')
+                            ->label('Serial Number')
+                            ->required()
+                            ->unique(ignoreRecord: true)
+                            ->maxLength(255),
+                        Select::make('status')
+                            ->options([
+                                'available' => 'Available',
+                                'assigned' => 'Assigned',
+                                'in_repair' => 'In Repair',
+                                'retired' => 'Retired',
+                                'lost' => 'Lost',
+                                'disposed' => 'Disposed',
+                            ])
+                            ->required()
+                            ->default('available'),
+                        Select::make('location_id')
+                            ->label('Location')
+                            ->options(fn () => Location::query()
+                                ->where('is_deleted', false)
+                                ->where('department_id', Filament::getTenant()?->id)
+                                ->orderBy('name')
+                                ->pluck('name', 'id'))
+                            ->searchable(),
+                        Select::make('assigned_to_user_id')
+                            ->label('Assigned To')
+                            ->options(fn () => User::query()
+                                ->where('status', 1)
+                                ->where('is_deleted', 0)
+                                ->where(function ($query): void {
+                                    $query
+                                        ->where('department_id', Filament::getTenant()?->id)
+                                        ->orWhereHas('departments', fn ($query) => $query->whereKey(Filament::getTenant()?->id));
+                                })
+                                ->orderBy('name')
+                                ->pluck('name', 'id'))
+                            ->searchable(),
+                    ]),
+            ])
             ->actions([
                 Action::make('createTicket')
                     ->label('Create Ticket')
@@ -108,7 +151,8 @@ class SerialNumbersRelationManager extends RelationManager
                             ->searchable()
                             ->live()
                             ->afterStateUpdated(fn (callable $set) => $set('issue_id', null))
-                            ->required(),
+                            ->visible(fn (): bool => TicketResource::shouldCollectTicketClassification())
+                            ->required(fn (): bool => TicketResource::shouldCollectTicketClassification()),
                         Select::make('issue_id')
                             ->label('Issue')
                             ->options(fn (Get $get) => filled($get('category'))
@@ -119,7 +163,8 @@ class SerialNumbersRelationManager extends RelationManager
                                     ->pluck('issue', 'id')
                                 : [])
                             ->searchable()
-                            ->required(),
+                            ->visible(fn (): bool => TicketResource::shouldCollectTicketClassification())
+                            ->required(fn (): bool => TicketResource::shouldCollectTicketClassification()),
                         Select::make('client_id')
                             ->label('Client')
                             ->options(fn (InventoryItemSerialNumber $record) => $this->clientOptions($record))

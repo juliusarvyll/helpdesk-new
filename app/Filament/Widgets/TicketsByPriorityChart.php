@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class TicketsByPriorityChart extends ChartWidget
 {
-    protected static ?string $heading = 'Tickets by Priority';
+    protected ?string $heading = 'Tickets by Priority';
 
     protected function getData(): array
     {

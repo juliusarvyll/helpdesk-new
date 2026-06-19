@@ -6,19 +6,19 @@ use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\AzureAccountProvisioningResource\Pages;
 use App\MicrosoftGraphService;
 use App\Models\AzureAccountProvisioning;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Form;
-use Filament\Forms\Get;
-use Filament\Forms\Set;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions\Action;
-use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Tables\Actions\DeleteAction;
-use Filament\Tables\Actions\DeleteBulkAction;
-use Filament\Tables\Actions\EditAction;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -35,9 +35,9 @@ class AzureAccountProvisioningResource extends Resource
 
     protected static bool $isScopedToTenant = false;
 
-    protected static ?string $navigationIcon = 'heroicon-o-cloud';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-cloud';
 
-    protected static ?string $navigationGroup = 'Administration';
+    protected static string|\UnitEnum|null $navigationGroup = 'Administration';
 
     protected static ?string $navigationLabel = 'Azure Accounts';
 
@@ -45,9 +45,9 @@ class AzureAccountProvisioningResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Azure Accounts';
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form
+        return $schema
             ->schema([
                 Placeholder::make('teams_redirect_uri')
                     ->label('Microsoft Teams Redirect URI')

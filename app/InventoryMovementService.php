@@ -186,8 +186,6 @@ class InventoryMovementService
             }
 
             if ($type === 'transferred') {
-                $updates['location_id'] = $metadata['location_id'] ?? null;
-
                 if (array_key_exists('department_id', $metadata)) {
                     $updates['department_id'] = $metadata['department_id'];
                 }

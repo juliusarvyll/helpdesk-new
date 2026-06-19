@@ -9,10 +9,29 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\FileUpload;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\Tabs\Tab;
+use Illuminate\Database\Eloquent\Builder;
 
 class ListInventoryItems extends ListRecords
 {
     protected static string $resource = InventoryItemResource::class;
+
+    /**
+     * @var array<string, int>|null
+     */
+    protected ?array $inventoryStatusTabCounts = null;
+
+    /**
+     * @var array<string, string>
+     */
+    private const STATUS_LABELS = [
+        'available' => 'Available',
+        'assigned' => 'Assigned',
+        'in_repair' => 'In Repair',
+        'retired' => 'Retired',
+        'lost' => 'Lost',
+        'disposed' => 'Disposed',
+    ];
 
     protected function getHeaderActions(): array
     {
@@ -101,6 +120,46 @@ class ListInventoryItems extends ListRecords
                 }),
             Actions\CreateAction::make(),
         ];
+    }
+
+    /**
+     * @return array<string, Tab>
+     */
+    public function getTabs(): array
+    {
+        return collect(['all' => Tab::make('All')])
+            ->merge(collect(self::STATUS_LABELS)->map(
+                fn (string $label, string $status): Tab => Tab::make($label)
+                    ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('status', $status))
+                    ->badge(fn (): int => $this->inventoryStatusTabCount($status)),
+            ))
+            ->all();
+    }
+
+    protected function inventoryStatusTabCount(string $status): int
+    {
+        return $this->inventoryStatusTabCounts()[$status] ?? 0;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    protected function inventoryStatusTabCounts(): array
+    {
+        if ($this->inventoryStatusTabCounts !== null) {
+            return $this->inventoryStatusTabCounts;
+        }
+
+        $this->inventoryStatusTabCounts = collect(self::STATUS_LABELS)
+            ->keys()
+            ->mapWithKeys(fn (string $status): array => [
+                $status => (clone InventoryItemResource::getEloquentQuery())
+                    ->where('status', $status)
+                    ->count(),
+            ])
+            ->all();
+
+        return $this->inventoryStatusTabCounts;
     }
 
     /**

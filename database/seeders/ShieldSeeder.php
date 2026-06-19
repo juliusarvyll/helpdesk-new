@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use BezhanSalleh\FilamentShield\Support\Utils;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
 class ShieldSeeder extends Seeder
@@ -150,6 +152,12 @@ class ShieldSeeder extends Seeder
             'view_any_ticket',
             'create_ticket',
             'update_ticket',
+            'view_inventory::item',
+            'view_any_inventory::item',
+            'update_inventory::item',
+            'assign_inventory_item',
+            'adjust_stock_inventory_item',
+            'retire_inventory_item',
             'view_issue::category',
             'view_any_issue::category',
             'view_issue::list',
@@ -172,9 +180,9 @@ class ShieldSeeder extends Seeder
      */
     protected static function makeRolesWithPermissions(array $rolesWithPermissions): void
     {
-        /** @var class-string<\Spatie\Permission\Models\Role> $roleModel */
+        /** @var class-string<Role> $roleModel */
         $roleModel = Utils::getRoleModel();
-        /** @var class-string<\Spatie\Permission\Models\Permission> $permissionModel */
+        /** @var class-string<Permission> $permissionModel */
         $permissionModel = Utils::getPermissionModel();
 
         foreach ($rolesWithPermissions as $rolePlusPermission) {

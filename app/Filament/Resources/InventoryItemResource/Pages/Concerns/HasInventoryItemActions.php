@@ -5,6 +5,8 @@ namespace App\Filament\Resources\InventoryItemResource\Pages\Concerns;
 use App\Filament\Resources\TicketResource;
 use App\InventoryMovementService;
 use App\InventoryTicketDefaults;
+use App\Models\InventoryItemSerialNumber;
+use App\Models\InventoryTransaction;
 use App\Models\IssueCategory;
 use App\Models\IssueList;
 use App\Models\Location;
@@ -15,8 +17,8 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Get;
-use Filament\Forms\Set;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 
 trait HasInventoryItemActions
 {
@@ -30,7 +32,7 @@ trait HasInventoryItemActions
                 ->label('Create Ticket')
                 ->icon('heroicon-o-ticket')
                 ->color('success')
-                ->visible(fn (): bool => ($this->record->serialNumbers()->count() === 1) && (auth()->user()?->can('create_ticket') ?? false))
+                ->visible(fn (): bool => $this->record->serialNumbers()->exists() && (auth()->user()?->can('create_ticket') ?? false))
                 ->form([
                     TextInput::make('subject')
                         ->required()
@@ -58,7 +60,8 @@ trait HasInventoryItemActions
                         ->searchable()
                         ->live()
                         ->afterStateUpdated(fn (callable $set) => $set('issue_id', null))
-                        ->required(),
+                        ->visible(fn (): bool => TicketResource::shouldCollectTicketClassification())
+                        ->required(fn (): bool => TicketResource::shouldCollectTicketClassification()),
                     Select::make('issue_id')
                         ->label('Issue')
                         ->options(fn (Get $get) => filled($get('category'))
@@ -69,7 +72,8 @@ trait HasInventoryItemActions
                                 ->pluck('issue', 'id')
                             : [])
                         ->searchable()
-                        ->required(),
+                        ->visible(fn (): bool => TicketResource::shouldCollectTicketClassification())
+                        ->required(fn (): bool => TicketResource::shouldCollectTicketClassification()),
                     Select::make('inventory_item_serial_number_id')
                         ->label('Serial Number')
                         ->options(fn () => $this->record->serialNumbers()
@@ -148,8 +152,9 @@ trait HasInventoryItemActions
             Action::make('assign')
                 ->icon('heroicon-o-user-plus')
                 ->color('info')
-                ->visible(fn (): bool => $this->record->serialNumbers()->doesntExist() && (auth()->user()?->can('assign', $this->record) ?? false))
+                ->visible(fn (): bool => auth()->user()?->can('assign', $this->record) ?? false)
                 ->form([
+                    $this->serialNumberSelect(['available']),
                     Select::make('assigned_to_user_id')
                         ->label('Assigned To')
                         ->options(fn () => User::query()
@@ -169,6 +174,24 @@ trait HasInventoryItemActions
                     Textarea::make('notes'),
                 ])
                 ->action(function (array $data): void {
+                    if ($this->hasSerialNumbers()) {
+                        $serialNumber = $this->serialNumberFromActionData($data);
+                        $fromStatus = $this->record->status;
+
+                        $serialNumber->update([
+                            'status' => 'assigned',
+                            'assigned_to_user_id' => $data['assigned_to_user_id'],
+                        ]);
+
+                        $this->record->refresh();
+                        $this->recordInventoryTransaction('assigned', $fromStatus, $data['ticket_id'] ?? null, $data['notes'] ?? null, [
+                            'inventory_item_serial_number_id' => $serialNumber->id,
+                        ]);
+                        $this->refreshInventoryItemRecord();
+
+                        return;
+                    }
+
                     app(InventoryMovementService::class)->assign(
                         inventoryItem: $this->record,
                         actor: auth()->user(),
@@ -183,8 +206,9 @@ trait HasInventoryItemActions
             Action::make('return')
                 ->icon('heroicon-o-arrow-uturn-left')
                 ->color('gray')
-                ->visible(fn (): bool => $this->record->serialNumbers()->doesntExist() && ($this->record->status === 'assigned') && (auth()->user()?->can('assign', $this->record) ?? false))
+                ->visible(fn (): bool => ($this->record->status === 'assigned' || $this->record->serialNumbers()->where('status', 'assigned')->exists()) && (auth()->user()?->can('assign', $this->record) ?? false))
                 ->form([
+                    $this->serialNumberSelect(['assigned']),
                     Select::make('ticket_id')
                         ->label('Related Ticket')
                         ->options(fn () => Ticket::query()
@@ -195,6 +219,24 @@ trait HasInventoryItemActions
                     Textarea::make('notes'),
                 ])
                 ->action(function (array $data): void {
+                    if ($this->hasSerialNumbers()) {
+                        $serialNumber = $this->serialNumberFromActionData($data);
+                        $fromStatus = $this->record->status;
+
+                        $serialNumber->update([
+                            'status' => 'available',
+                            'assigned_to_user_id' => null,
+                        ]);
+
+                        $this->record->refresh();
+                        $this->recordInventoryTransaction('returned', $fromStatus, $data['ticket_id'] ?? null, $data['notes'] ?? null, [
+                            'inventory_item_serial_number_id' => $serialNumber->id,
+                        ]);
+                        $this->refreshInventoryItemRecord();
+
+                        return;
+                    }
+
                     app(InventoryMovementService::class)->return(
                         inventoryItem: $this->record,
                         actor: auth()->user(),
@@ -238,8 +280,9 @@ trait HasInventoryItemActions
             Action::make('transfer')
                 ->icon('heroicon-o-map-pin')
                 ->color('primary')
-                ->visible(fn (): bool => $this->record->serialNumbers()->doesntExist() && (auth()->user()?->can('assign', $this->record) ?? false))
+                ->visible(fn (): bool => $this->hasSerialNumbers() && (auth()->user()?->can('assign', $this->record) ?? false))
                 ->form([
+                    $this->serialNumberSelect(),
                     Select::make('location_id')
                         ->label('Location')
                         ->options(fn () => Location::query()
@@ -250,13 +293,18 @@ trait HasInventoryItemActions
                     Textarea::make('notes'),
                 ])
                 ->action(function (array $data): void {
-                    app(InventoryMovementService::class)->transfer(
-                        inventoryItem: $this->record,
-                        actor: auth()->user(),
-                        locationId: $data['location_id'] ?? null,
-                        notes: $data['notes'] ?? null,
-                    );
+                    $serialNumber = $this->serialNumberFromActionData($data);
+                    $fromStatus = $this->record->status;
 
+                    $serialNumber->update([
+                        'location_id' => $data['location_id'] ?? null,
+                    ]);
+
+                    $this->record->refresh();
+                    $this->recordInventoryTransaction('transferred', $fromStatus, null, $data['notes'] ?? null, [
+                        'inventory_item_serial_number_id' => $serialNumber->id,
+                        'location_id' => $data['location_id'] ?? null,
+                    ]);
                     $this->refreshInventoryItemRecord();
                 })
                 ->successNotificationTitle('Inventory item transferred.'),
@@ -264,8 +312,9 @@ trait HasInventoryItemActions
                 ->label('Mark In Repair')
                 ->icon('heroicon-o-wrench-screwdriver')
                 ->color('warning')
-                ->visible(fn (): bool => $this->record->serialNumbers()->doesntExist() && (auth()->user()?->can('update', $this->record) ?? false))
+                ->visible(fn (): bool => auth()->user()?->can('update', $this->record) ?? false)
                 ->form([
+                    $this->serialNumberSelect(),
                     Select::make('ticket_id')
                         ->label('Related Ticket')
                         ->options(fn () => Ticket::query()
@@ -276,6 +325,21 @@ trait HasInventoryItemActions
                     Textarea::make('notes'),
                 ])
                 ->action(function (array $data): void {
+                    if ($this->hasSerialNumbers()) {
+                        $serialNumber = $this->serialNumberFromActionData($data);
+                        $fromStatus = $this->record->status;
+
+                        $serialNumber->update(['status' => 'in_repair']);
+
+                        $this->record->refresh();
+                        $this->recordInventoryTransaction('repaired', $fromStatus, $data['ticket_id'] ?? null, $data['notes'] ?? null, [
+                            'inventory_item_serial_number_id' => $serialNumber->id,
+                        ]);
+                        $this->refreshInventoryItemRecord();
+
+                        return;
+                    }
+
                     app(InventoryMovementService::class)->repair(
                         inventoryItem: $this->record,
                         actor: auth()->user(),
@@ -290,11 +354,30 @@ trait HasInventoryItemActions
                 ->icon('heroicon-o-archive-box-x-mark')
                 ->color('danger')
                 ->requiresConfirmation()
-                ->visible(fn (): bool => $this->record->serialNumbers()->doesntExist() && (auth()->user()?->can('retire', $this->record) ?? false))
+                ->visible(fn (): bool => auth()->user()?->can('retire', $this->record) ?? false)
                 ->form([
+                    $this->serialNumberSelect(),
                     Textarea::make('notes'),
                 ])
                 ->action(function (array $data): void {
+                    if ($this->hasSerialNumbers()) {
+                        $serialNumber = $this->serialNumberFromActionData($data);
+                        $fromStatus = $this->record->status;
+
+                        $serialNumber->update([
+                            'status' => 'retired',
+                            'assigned_to_user_id' => null,
+                        ]);
+
+                        $this->record->refresh();
+                        $this->recordInventoryTransaction('retired', $fromStatus, null, $data['notes'] ?? null, [
+                            'inventory_item_serial_number_id' => $serialNumber->id,
+                        ]);
+                        $this->refreshInventoryItemRecord();
+
+                        return;
+                    }
+
                     app(InventoryMovementService::class)->retire(
                         inventoryItem: $this->record,
                         actor: auth()->user(),
@@ -335,5 +418,75 @@ trait HasInventoryItemActions
     {
         $this->record->refresh();
         $this->refreshFormData(array_keys($this->record->getAttributes()));
+    }
+
+    /**
+     * @param  array<int, string>|null  $statuses
+     */
+    private function serialNumberSelect(?array $statuses = null): Select
+    {
+        return Select::make('inventory_item_serial_number_id')
+            ->label('Serial Number')
+            ->options(fn () => $this->serialNumberOptions($statuses))
+            ->default(fn (): ?int => $this->defaultSerialNumberId($statuses))
+            ->visible(fn (): bool => $this->hasSerialNumbers())
+            ->required(fn (): bool => $this->hasSerialNumbers())
+            ->searchable();
+    }
+
+    /**
+     * @param  array<int, string>|null  $statuses
+     * @return array<int, string>
+     */
+    private function serialNumberOptions(?array $statuses = null): array
+    {
+        return $this->record->serialNumbers()
+            ->when($statuses !== null, fn ($query) => $query->whereIn('status', $statuses))
+            ->orderBy('serial_number')
+            ->pluck('serial_number', 'id')
+            ->all();
+    }
+
+    /**
+     * @param  array<int, string>|null  $statuses
+     */
+    private function defaultSerialNumberId(?array $statuses = null): ?int
+    {
+        return $this->record->serialNumbers()
+            ->when($statuses !== null, fn ($query) => $query->whereIn('status', $statuses))
+            ->orderBy('serial_number')
+            ->value('id');
+    }
+
+    private function hasSerialNumbers(): bool
+    {
+        return $this->record->serialNumbers()->exists();
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function serialNumberFromActionData(array $data): InventoryItemSerialNumber
+    {
+        return $this->record->serialNumbers()->findOrFail($data['inventory_item_serial_number_id']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    private function recordInventoryTransaction(string $type, ?string $fromStatus, ?int $ticketId, ?string $notes, array $metadata = []): void
+    {
+        InventoryTransaction::create([
+            'inventory_item_id' => $this->record->id,
+            'ticket_id' => $ticketId,
+            'user_id' => auth()->id(),
+            'assigned_to_user_id' => $this->record->assigned_to_user_id,
+            'type' => $type,
+            'quantity' => 1,
+            'from_status' => $fromStatus,
+            'to_status' => $this->record->status,
+            'notes' => $notes,
+            'metadata' => $metadata ?: null,
+        ]);
     }
 }

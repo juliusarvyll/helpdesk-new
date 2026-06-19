@@ -23,11 +23,11 @@ class InventoryItemSerialNumber extends Model
     protected static function booted(): void
     {
         static::saved(function (InventoryItemSerialNumber $serialNumber): void {
-            $serialNumber->syncInventoryItemQuantity($serialNumber->getOriginal('inventory_item_id'));
+            $serialNumber->syncInventoryItem($serialNumber->getOriginal('inventory_item_id'));
         });
 
         static::deleted(function (InventoryItemSerialNumber $serialNumber): void {
-            $serialNumber->syncInventoryItemQuantity($serialNumber->inventory_item_id);
+            $serialNumber->syncInventoryItem($serialNumber->inventory_item_id);
         });
     }
 
@@ -61,14 +61,14 @@ class InventoryItemSerialNumber extends Model
         return $this->openTickets()->exists();
     }
 
-    private function syncInventoryItemQuantity(?int $originalInventoryItemId): void
+    private function syncInventoryItem(?int $originalInventoryItemId): void
     {
         if ($originalInventoryItemId) {
-            InventoryItem::query()->find($originalInventoryItemId)?->syncQuantityFromSerialNumbers();
+            InventoryItem::query()->find($originalInventoryItemId)?->syncFromSerialNumbers();
         }
 
         if ($this->inventory_item_id && $this->inventory_item_id !== $originalInventoryItemId) {
-            InventoryItem::query()->find($this->inventory_item_id)?->syncQuantityFromSerialNumbers();
+            InventoryItem::query()->find($this->inventory_item_id)?->syncFromSerialNumbers();
         }
     }
 }

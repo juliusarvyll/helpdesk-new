@@ -11,20 +11,20 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Notifications\TicketAssigned;
 use App\TicketStatus;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Form;
-use Filament\Forms\Get;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions\Action;
-use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Tables\Actions\DeleteBulkAction;
-use Filament\Tables\Actions\EditAction;
-use Filament\Tables\Actions\ViewAction;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -36,7 +36,7 @@ class TicketResource extends Resource
 {
     use HasCompactTableColumns;
 
-    protected const TECHNICAL_SUPPORT_ASSIGNMENT_ROLES = ['super_admin', 'admin', 'technical_support'];
+    protected const TECHNICAL_SUPPORT_ASSIGNMENT_ROLES = ['super_admin', 'technical_support'];
 
     protected const UNASSIGNED_TICKET_ASSIGNMENT_ROLES = ['super_admin', 'technical_support'];
 
@@ -44,9 +44,9 @@ class TicketResource extends Resource
 
     protected static ?string $tenantOwnershipRelationshipName = 'department';
 
-    protected static ?string $navigationIcon = 'heroicon-o-ticket';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-ticket';
 
-    protected static ?string $navigationGroup = 'Helpdesk';
+    protected static string|\UnitEnum|null $navigationGroup = 'Helpdesk';
 
     public static function getEloquentQuery(): Builder
     {
@@ -69,9 +69,9 @@ class TicketResource extends Resource
         ]);
     }
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form->schema([
+        return $schema->schema([
             TextInput::make('subject')
                 ->required()
                 ->disabled(fn (string $operation): bool => $operation === 'edit' && static::isClient())
@@ -98,7 +98,8 @@ class TicketResource extends Resource
                 ->live()
                 ->afterStateUpdated(fn (callable $set) => $set('issue_id', null))
                 ->disabled(fn (string $operation): bool => $operation === 'edit' && static::isClient())
-                ->required(),
+                ->visible(fn (string $operation): bool => static::shouldCollectTicketClassification($operation))
+                ->required(fn (string $operation): bool => static::shouldCollectTicketClassification($operation)),
             Select::make('issue_id')
                 ->label('Issue')
                 ->options(fn (callable $get) => $get('category')
@@ -109,7 +110,8 @@ class TicketResource extends Resource
                 )
                 ->searchable()
                 ->disabled(fn (callable $get, string $operation): bool => ! $get('category') || ($operation === 'edit' && static::isClient()))
-                ->required(),
+                ->visible(fn (string $operation): bool => static::shouldCollectTicketClassification($operation))
+                ->required(fn (string $operation): bool => static::shouldCollectTicketClassification($operation)),
             Select::make('inventory_item_id')
                 ->label('Affected Inventory Item')
                 ->relationship('inventoryItem', 'name', fn ($query) => $query->where('is_deleted', false))
@@ -306,6 +308,28 @@ class TicketResource extends Resource
                     ->color('success')
                     ->visible(fn (Ticket $record): bool => static::canShowStatusTransitionAction($record, 'close'))
                     ->form([
+                        Select::make('category')
+                            ->options(fn () => IssueCategory::query()
+                                ->where('is_deleted', 0)
+                                ->orderBy('name')
+                                ->pluck('name', 'id'))
+                            ->default(fn (Ticket $record): ?int => $record->issue?->issue_category_id)
+                            ->searchable()
+                            ->live()
+                            ->afterStateUpdated(fn (callable $set) => $set('issue_id', null))
+                            ->required(),
+                        Select::make('issue_id')
+                            ->label('Issue')
+                            ->options(fn (Get $get) => filled($get('category'))
+                                ? IssueList::query()
+                                    ->where('issue_category_id', $get('category'))
+                                    ->where('is_deleted', 0)
+                                    ->orderBy('issue')
+                                    ->pluck('issue', 'id')
+                                : [])
+                            ->default(fn (Ticket $record): ?int => $record->issue_id)
+                            ->searchable()
+                            ->required(),
                         Textarea::make('technical_support_remarks')
                             ->label('Technical Support Remarks')
                             ->default(fn (Ticket $record): ?string => $record->technical_support_remarks)
@@ -315,6 +339,7 @@ class TicketResource extends Resource
                     ->requiresConfirmation()
                     ->action(function (Ticket $record, array $data): void {
                         $record->forceFill([
+                            'issue_id' => $data['issue_id'],
                             'technical_support_remarks' => $data['technical_support_remarks'],
                         ]);
 
@@ -344,6 +369,11 @@ class TicketResource extends Resource
     public static function isClient(): bool
     {
         return auth()->user()?->hasRole('client') ?? false;
+    }
+
+    public static function shouldCollectTicketClassification(string $operation = 'create'): bool
+    {
+        return $operation !== 'create' || ! static::isClient();
     }
 
     public static function canSelectTicketClient(): bool
@@ -548,6 +578,8 @@ class TicketResource extends Resource
         }
 
         unset(
+            $data['category'],
+            $data['issue_id'],
             $data['technicalSupportUsers'],
             $data['support_assignment_status'],
             $data['assigned_at'],

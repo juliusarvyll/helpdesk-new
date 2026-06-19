@@ -7,9 +7,13 @@ use App\Filament\Resources\InventoryItemResource\Pages;
 use App\Filament\Resources\InventoryItemResource\RelationManagers\SerialNumbersRelationManager;
 use App\InventoryMovementService;
 use App\Models\InventoryItem;
-use App\Models\Location;
 use App\Models\Ticket;
 use App\Models\User;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\KeyValue;
@@ -17,13 +21,8 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Form;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions\Action;
-use Filament\Tables\Actions\BulkAction;
-use Filament\Tables\Actions\BulkActionGroup;
-use Filament\Tables\Actions\EditAction;
-use Filament\Tables\Actions\ViewAction;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -38,13 +37,13 @@ class InventoryItemResource extends Resource
 
     protected static ?string $tenantOwnershipRelationshipName = 'department';
 
-    protected static ?string $navigationIcon = 'heroicon-o-cube';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-cube';
 
-    protected static ?string $navigationGroup = 'Inventory';
+    protected static string|\UnitEnum|null $navigationGroup = 'Inventory';
 
-    public static function form(Form $form): Form
+    public static function form(Schema $schema): Schema
     {
-        return $form->schema([
+        return $schema->schema([
             Select::make('inventory_category_id')
                 ->relationship(
                     'category',
@@ -64,18 +63,6 @@ class InventoryItemResource extends Resource
                 ->maxLength(255),
             Textarea::make('description')
                 ->columnSpanFull(),
-            Select::make('status')
-                ->options([
-                    'available' => 'Available',
-                    'assigned' => 'Assigned',
-                    'in_repair' => 'In Repair',
-                    'retired' => 'Retired',
-                    'lost' => 'Lost',
-                    'disposed' => 'Disposed',
-                ])
-                ->required()
-                ->default('available')
-                ->hiddenOn('edit'),
             TextInput::make('quantity')
                 ->required()
                 ->numeric()
@@ -84,27 +71,6 @@ class InventoryItemResource extends Resource
                 ->hiddenOn('edit'),
             TextInput::make('unit')
                 ->maxLength(255),
-            Select::make('location_id')
-                ->label('Location')
-                ->relationship(
-                    'location',
-                    'name',
-                    fn ($query) => $query
-                        ->where('is_deleted', false)
-                        ->where('department_id', Filament::getTenant()?->id)
-                )
-                ->searchable()
-                ->preload()
-                ->createOptionForm([
-                    TextInput::make('name')->required(),
-                    Textarea::make('description'),
-                ])
-                ->createOptionUsing(fn (array $data): int => Location::create([
-                    ...$data,
-                    'department_id' => Filament::getTenant()?->id,
-                    'is_deleted' => false,
-                ])->id)
-                ->hiddenOn('edit'),
             Select::make('assigned_to_user_id')
                 ->relationship(
                     'assignedToUser',
@@ -177,8 +143,9 @@ class InventoryItemResource extends Resource
                 ->columns(2)
                 ->columnSpanFull()
                 ->collapsible()
+                ->addActionLabel('Add serial number')
                 ->itemLabel(fn (array $state): ?string => $state['serial_number'] ?? null)
-                ->hiddenOn('create'),
+                ->visibleOn('create'),
         ]);
     }
 
@@ -247,11 +214,6 @@ class InventoryItemResource extends Resource
                 TextColumn::make('quantity')
                     ->numeric()
                     ->sortable(),
-                static::compactTextColumn(TextColumn::make('location.name'), 28)
-                    ->label('Location')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(),
                 static::compactTextColumn(TextColumn::make('assignedToUser.name'), 28)
                     ->label('Assigned To')
                     ->searchable()
@@ -383,30 +345,6 @@ class InventoryItemResource extends Resource
                         );
                     })
                     ->successNotificationTitle('Inventory stock consumed.'),
-                Action::make('transfer')
-                    ->icon('heroicon-o-map-pin')
-                    ->color('primary')
-                    ->visible(fn (InventoryItem $record): bool => ! static::hasSerialNumbers($record) && (auth()->user()?->can('assign', $record) ?? false))
-                    ->form([
-                        Select::make('location_id')
-                            ->label('Location')
-                            ->options(fn () => Location::query()
-                                ->where('is_deleted', false)
-                                ->where('department_id', Filament::getTenant()?->id)
-                                ->orderBy('name')
-                                ->pluck('name', 'id'))
-                            ->searchable(),
-                        Textarea::make('notes'),
-                    ])
-                    ->action(function (InventoryItem $record, array $data): void {
-                        app(InventoryMovementService::class)->transfer(
-                            inventoryItem: $record,
-                            actor: auth()->user(),
-                            locationId: $data['location_id'] ?? null,
-                            notes: $data['notes'] ?? null,
-                        );
-                    })
-                    ->successNotificationTitle('Inventory item transferred.'),
                 Action::make('repair')
                     ->label('Mark In Repair')
                     ->icon('heroicon-o-wrench-screwdriver')
@@ -503,7 +441,6 @@ class InventoryItemResource extends Resource
                 'assignedToUser',
                 'category',
                 'department',
-                'location',
             ])
             ->withExists('serialNumbers');
     }

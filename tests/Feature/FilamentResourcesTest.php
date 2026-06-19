@@ -5,9 +5,11 @@ namespace Tests\Feature;
 use App\Filament\Resources\InventoryItemResource;
 use App\Filament\Resources\InventoryItemResource\Pages\ListInventoryItems;
 use App\Filament\Resources\TicketResource;
+use App\Filament\Resources\TicketResource\Pages\ViewTicket;
 use App\Filament\Resources\UserResource;
 use App\Filament\Widgets\TicketStatsOverview;
 use App\Models\Department;
+use App\Models\InventoryItem;
 use App\Models\IssueCategory;
 use App\Models\IssueList;
 use App\Models\Position;
@@ -17,8 +19,10 @@ use App\Models\User;
 use App\TicketStatus;
 use Database\Seeders\ShieldSeeder;
 use ErrorException;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Livewire\Livewire;
 use ReflectionMethod;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role as PermissionRole;
@@ -64,6 +68,40 @@ class FilamentResourcesTest extends TestCase
         $this->assertNotContains('panel_user', $options);
     }
 
+    public function test_user_resource_department_options_only_include_active_departments(): void
+    {
+        $activeDepartment = Department::factory()->create([
+            'name' => 'Active Department',
+            'is_deleted' => 0,
+        ]);
+        Department::factory()->create([
+            'name' => 'Deleted Department',
+            'is_deleted' => 1,
+        ]);
+
+        $this->assertSame(
+            [$activeDepartment->id => 'Active Department'],
+            UserResource::departmentOptions(),
+        );
+    }
+
+    public function test_user_resource_position_options_only_include_active_positions(): void
+    {
+        $activePosition = Position::factory()->create([
+            'name' => 'Active Position',
+            'is_deleted' => 0,
+        ]);
+        Position::factory()->create([
+            'name' => 'Deleted Position',
+            'is_deleted' => 1,
+        ]);
+
+        $this->assertSame(
+            [$activePosition->id => 'Active Position'],
+            UserResource::positionOptions(),
+        );
+    }
+
     public function test_user_resource_syncs_primary_department_to_tenant_departments(): void
     {
         $department = Department::factory()->create();
@@ -100,6 +138,21 @@ class FilamentResourcesTest extends TestCase
         $this->assertSame('["control room.docx","LR101.docx"]', $metadata['source_files']);
         $this->assertSame('true', $metadata['functional']);
         $this->assertNull($metadata['empty']);
+    }
+
+    public function test_inventory_item_list_has_tabs_for_all_statuses(): void
+    {
+        $tabs = (new ListInventoryItems)->getTabs();
+
+        $this->assertSame([
+            'all',
+            'available',
+            'assigned',
+            'in_repair',
+            'retired',
+            'lost',
+            'disposed',
+        ], array_keys($tabs));
     }
 
     public function test_inventory_item_import_csv_parser_uses_explicit_escape_parameter(): void
@@ -221,6 +274,23 @@ class FilamentResourcesTest extends TestCase
         $this->assertArrayNotHasKey('technicalSupportUsers', $data);
     }
 
+    public function test_admin_role_cannot_manage_technical_support_assignments(): void
+    {
+        PermissionRole::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('admin');
+
+        $this->actingAs($user);
+
+        $data = TicketResource::sanitizeTechnicalSupportAssignmentData([
+            'subject' => 'Cannot print',
+            'technicalSupportUsers' => [1, 2],
+        ]);
+
+        $this->assertFalse(TicketResource::canManageTechnicalSupportAssignments());
+        $this->assertArrayNotHasKey('technicalSupportUsers', $data);
+    }
+
     public function test_technical_support_role_can_manage_technical_support_assignments(): void
     {
         PermissionRole::firstOrCreate(['name' => 'technical_support', 'guard_name' => 'web']);
@@ -236,6 +306,41 @@ class FilamentResourcesTest extends TestCase
 
         $this->assertTrue(TicketResource::canManageTechnicalSupportAssignments());
         $this->assertSame([1, 2], $data['technicalSupportUsers']);
+    }
+
+    public function test_super_admin_role_can_manage_technical_support_assignments(): void
+    {
+        PermissionRole::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $user = User::factory()->create();
+        $user->assignRole('super_admin');
+
+        $this->actingAs($user);
+
+        $this->assertTrue(TicketResource::canManageTechnicalSupportAssignments());
+    }
+
+    public function test_technical_support_assignment_options_exclude_admins_and_clients(): void
+    {
+        PermissionRole::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'technical_support', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+
+        $superAdmin = User::factory()->create(['status' => 1, 'is_deleted' => 0]);
+        $superAdmin->assignRole('super_admin');
+        $technicalSupport = User::factory()->create(['status' => 1, 'is_deleted' => 0]);
+        $technicalSupport->assignRole('technical_support');
+        $admin = User::factory()->create(['status' => 1, 'is_deleted' => 0]);
+        $admin->assignRole('admin');
+        $client = User::factory()->create(['status' => 1, 'is_deleted' => 0]);
+        $client->assignRole('client');
+
+        $options = TicketResource::technicalSupportAssignmentOptions();
+
+        $this->assertArrayHasKey($superAdmin->id, $options);
+        $this->assertArrayHasKey($technicalSupport->id, $options);
+        $this->assertArrayNotHasKey($admin->id, $options);
+        $this->assertArrayNotHasKey($client->id, $options);
     }
 
     public function test_ticket_create_data_strips_technical_support_assignments(): void
@@ -285,6 +390,33 @@ class FilamentResourcesTest extends TestCase
         $this->assertArrayNotHasKey('asset_name', $data);
         $this->assertArrayNotHasKey('client_comments', $data);
         $this->assertArrayNotHasKey('technicalSupportUsers', $data);
+    }
+
+    public function test_ticket_view_page_renders(): void
+    {
+        Permission::firstOrCreate(['name' => 'view_ticket', 'guard_name' => 'web']);
+        Permission::firstOrCreate(['name' => 'view_any_ticket', 'guard_name' => 'web']);
+        PermissionRole::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        $department = Department::factory()->create();
+        $client = User::factory()->create([
+            'department_id' => $department->id,
+            'status' => 1,
+            'is_deleted' => 0,
+        ]);
+        $client->assignRole('client');
+        $client->givePermissionTo(['view_ticket', 'view_any_ticket']);
+        $client->departments()->attach($department);
+        $ticket = Ticket::factory()->create([
+            'client_id' => $client->id,
+            'created_by' => $client->id,
+            'department_id' => $department->id,
+        ]);
+
+        Filament::setTenant($department, isQuiet: true);
+
+        Livewire::actingAs($client)
+            ->test(ViewTicket::class, ['record' => $ticket->getRouteKey()])
+            ->assertOk();
     }
 
     public function test_closed_ticket_does_not_show_status_transition_actions(): void
@@ -401,6 +533,27 @@ class FilamentResourcesTest extends TestCase
         $this->assertSame($department->id, $data['department_id']);
     }
 
+    public function test_seeded_client_role_can_create_tickets_and_use_inventory_item_actions(): void
+    {
+        $this->seed(ShieldSeeder::class);
+
+        $client = User::factory()->create();
+        $client->assignRole('client');
+        $inventoryItem = InventoryItem::factory()->create([
+            'assigned_to_user_id' => null,
+        ]);
+
+        $this->actingAs($client);
+
+        $this->assertTrue($client->can('create_ticket'));
+        $this->assertTrue($client->can('viewAny', InventoryItem::class));
+        $this->assertTrue($client->can('view', $inventoryItem));
+        $this->assertTrue($client->can('assign', $inventoryItem));
+        $this->assertTrue($client->can('update', $inventoryItem));
+        $this->assertTrue($client->can('adjustStock', $inventoryItem));
+        $this->assertTrue($client->can('retire', $inventoryItem));
+    }
+
     public function test_super_admin_ticket_create_data_can_use_selected_client_and_department(): void
     {
         PermissionRole::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
@@ -434,6 +587,7 @@ class FilamentResourcesTest extends TestCase
         ]);
 
         $this->assertTrue(TicketResource::canSelectTicketClient());
+        $this->assertTrue(TicketResource::shouldCollectTicketClassification());
         $this->assertSame($client->id, $data['client_id']);
         $this->assertSame($department->id, $data['department_id']);
     }
@@ -449,6 +603,8 @@ class FilamentResourcesTest extends TestCase
         $data = TicketResource::sanitizeClientTicketData([
             'client_id' => $user->id,
             'department_id' => 10,
+            'category' => 5,
+            'issue_id' => 12,
             'status' => 'closed',
             'technical_support_remarks' => 'internal',
             'client_comments' => 'please update me',
@@ -456,7 +612,11 @@ class FilamentResourcesTest extends TestCase
 
         $this->assertSame($user->id, $data['client_id']);
         $this->assertSame(10, $data['department_id']);
+        $this->assertFalse(TicketResource::shouldCollectTicketClassification());
+        $this->assertTrue(TicketResource::shouldCollectTicketClassification('edit'));
         $this->assertSame('please update me', $data['client_comments']);
+        $this->assertArrayNotHasKey('category', $data);
+        $this->assertArrayNotHasKey('issue_id', $data);
         $this->assertArrayNotHasKey('status', $data);
         $this->assertArrayNotHasKey('technical_support_remarks', $data);
     }

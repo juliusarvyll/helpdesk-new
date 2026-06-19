@@ -4,10 +4,10 @@ namespace App\Filament\Resources;
 
 use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\DatabaseNotificationResource\Pages;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
 use Filament\Resources\Resource;
-use Filament\Tables\Actions\Action;
-use Filament\Tables\Actions\BulkAction;
-use Filament\Tables\Actions\BulkActionGroup;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -21,11 +21,11 @@ class DatabaseNotificationResource extends Resource
 
     protected static ?string $model = DatabaseNotification::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-bell';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-bell';
 
     protected static ?string $navigationLabel = 'Notifications';
 
-    protected static ?string $navigationGroup = 'System';
+    protected static string|\UnitEnum|null $navigationGroup = 'System';
 
     protected static bool $isScopedToTenant = false;
 

@@ -4,9 +4,9 @@ namespace App\Http\Middleware;
 
 use App\Filament\Resources\DatabaseNotificationResource;
 use Closure;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Models\Contracts\HasTenants;
-use Filament\Notifications\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;

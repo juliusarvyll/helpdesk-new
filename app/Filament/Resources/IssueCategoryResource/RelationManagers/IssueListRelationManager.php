@@ -3,8 +3,8 @@
 namespace App\Filament\Resources\IssueCategoryResource\RelationManagers;
 
 use App\Filament\Concerns\HasCompactTableColumns;
+use Filament\Actions\EditAction;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;

@@ -68,6 +68,45 @@ class InventoryItemTicketCreationTest extends TestCase
         Notification::assertSentTo($actor, NewTicketCreated::class);
     }
 
+    public function test_client_can_create_inventory_serial_ticket_without_classification(): void
+    {
+        Notification::fake();
+
+        Role::firstOrCreate(['name' => 'client', 'guard_name' => 'web']);
+        $department = Department::factory()->create();
+        $client = User::factory()->create(['department_id' => $department->id]);
+        $client->assignRole('client');
+        $category = InventoryCategory::factory()->create();
+        $item = InventoryItem::factory()->create([
+            'inventory_category_id' => $category->id,
+            'asset_tag' => 'AST-CLIENT-TICKET',
+            'name' => 'Client Laptop',
+        ]);
+        $serialNumber = InventoryItemSerialNumber::create([
+            'inventory_item_id' => $item->id,
+            'serial_number' => 'SN-CLIENT-TICKET',
+            'status' => 'assigned',
+            'assigned_to_user_id' => $client->id,
+        ]);
+
+        $this->actingAs($client);
+
+        $ticket = app(TicketCreationService::class)->create([
+            'subject' => 'Laptop will not start',
+            'description' => 'The power button does not respond.',
+            'priority' => 'normal',
+            'client_id' => $client->id,
+            'inventory_item_id' => $item->id,
+            'inventory_item_serial_number_id' => $serialNumber->id,
+            'asset_id' => $item->asset_tag,
+            'asset_name' => $item->name,
+        ], $client);
+
+        $this->assertNull($ticket->issue_id);
+        $this->assertSame($client->id, $ticket->client_id);
+        $this->assertSame($department->id, $ticket->department_id);
+    }
+
     public function test_inventory_item_ticket_requires_serial_number(): void
     {
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);

@@ -642,7 +642,7 @@ class AzureAccountProvisioningTest extends TestCase
             ])
             ->assertSet('createdCredentials.email', 'student@example.edu')
             ->assertSet('createdCredentials.password', 'TemporaryPassword123!')
-            ->assertSet('mountedActions.0', 'showAzureCredentials')
+            ->assertSet('mountedActions.0.name', 'showAzureCredentials')
             ->assertSeeHtml('text-gray-900 dark:text-white')
             ->assertSeeHtml('text-gray-950 shadow-sm dark:border-gray-700 dark:bg-gray-950 dark:text-white');
 

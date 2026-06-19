@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\IssueList;
 use App\Models\Ticket;
 use App\TicketStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -24,8 +25,10 @@ class TicketWorkflowTest extends TestCase
 
     public function test_ticket_can_transition_from_on_progress_to_closed(): void
     {
+        $issue = IssueList::factory()->create();
         $ticket = Ticket::factory()->create([
             'status' => TicketStatus::OnProgress,
+            'issue_id' => $issue->id,
             'technical_support_remarks' => 'Resolved by resetting the user password.',
         ]);
 
@@ -68,8 +71,10 @@ class TicketWorkflowTest extends TestCase
 
     public function test_ticket_can_transition_from_pending_to_closed_with_technical_support_remarks(): void
     {
+        $issue = IssueList::factory()->create();
         $ticket = Ticket::factory()->create([
             'status' => TicketStatus::Pending,
+            'issue_id' => $issue->id,
             'technical_support_remarks' => 'Resolved after confirming the requester no longer needs access.',
         ]);
 
@@ -82,7 +87,25 @@ class TicketWorkflowTest extends TestCase
 
     public function test_ticket_cannot_close_without_technical_support_remarks(): void
     {
-        $ticket = Ticket::factory()->create(['status' => TicketStatus::OnProgress]);
+        $issue = IssueList::factory()->create();
+        $ticket = Ticket::factory()->create([
+            'status' => TicketStatus::OnProgress,
+            'issue_id' => $issue->id,
+        ]);
+
+        $result = $ticket->transitionTo(TicketStatus::Closed);
+
+        $this->assertFalse($result);
+        $this->assertEquals(TicketStatus::OnProgress, $ticket->fresh()->status);
+        $this->assertNull($ticket->fresh()->end_time);
+    }
+
+    public function test_ticket_cannot_close_without_an_issue(): void
+    {
+        $ticket = Ticket::factory()->create([
+            'status' => TicketStatus::OnProgress,
+            'technical_support_remarks' => 'Resolved by replacing the damaged cable.',
+        ]);
 
         $result = $ticket->transitionTo(TicketStatus::Closed);
 

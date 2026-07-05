@@ -11,6 +11,7 @@ use Filament\Actions\EditAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
@@ -42,6 +43,9 @@ class InventoryCategoryResource extends Resource
                 ->required()
                 ->maxLength(255)
                 ->datalist(fn (): array => array_values(static::categoryTypeOptions())),
+            Toggle::make('is_it_asset')
+                ->label('IT Asset Category')
+                ->helperText('IT Assets are serviced through the Helpdesk Ticket system. Non-IT Assets are serviced through Job Orders.'),
             Select::make('parent_id')
                 ->relationship(
                     'parent',
@@ -73,6 +77,11 @@ class InventoryCategoryResource extends Resource
                         'spare_part' => 'primary',
                         default => 'gray',
                     }),
+                TextColumn::make('is_it_asset')
+                    ->label('Asset Classification')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'IT Asset' : 'Non-IT Asset')
+                    ->color(fn (bool $state): string => $state ? 'info' : 'gray'),
                 static::compactTextColumn(TextColumn::make('parent.name'), 32)
                     ->label('Parent Category')
                     ->searchable()

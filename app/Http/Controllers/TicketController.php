@@ -58,7 +58,6 @@ class TicketController extends Controller
         $validation = Validator::make($request->all(), [
             'subject' => 'required',
             'description' => 'required',
-            'location' => 'required',
         ]);
 
         if ($validation->passes()) {
@@ -67,14 +66,8 @@ class TicketController extends Controller
 
             $data->subject = $request->subject;
             $data->description = $request->description;
-            $data->location = $request->location;
-            $data->client = Auth::user()->name;
-            $data->department = Auth::user()->department;
-            $data->position = Auth::user()->position;
-            $data->role = Auth::user()->role;
             $data->client_id = Auth::id();
             $data->status = 'active';
-            $data->created_ticket = Auth::user()->name;
 
             if ($data->save()) {
                 SystemLogs::saveLogs('successfully created #'.$data->OrderNo.' subject '.$request->subject.' as new ticket!');
@@ -110,7 +103,7 @@ class TicketController extends Controller
                 return redirect('admin/ticket/view/'.$id);
             } else {
 
-                if ($data->client_id == Auth::id() || $data->created_ticket == Auth::user()->name) {
+                if ($data->client_id == Auth::id() || $data->created_by == Auth::id()) {
 
                     $count_active = Ticket::count_active(Auth::id());
                     $count_closed = Ticket::count_closed(Auth::id());
@@ -140,7 +133,7 @@ class TicketController extends Controller
 
         if ($data) {
 
-            if ($data->client_id == Auth::id() || $data->created_ticket == Auth::user()->name) {
+            if ($data->client_id == Auth::id() || $data->created_by == Auth::id()) {
 
                 $data->client_confirmation = 1;
 
@@ -185,7 +178,7 @@ class TicketController extends Controller
 
         if ($data) {
 
-            if ($data->client_id == Auth::id() || $data->created_ticket == Auth::user()->name) {
+            if ($data->client_id == Auth::id() || $data->created_by == Auth::id()) {
 
                 $validation = Validator::make($request->all(), [
                     'comment' => 'required',

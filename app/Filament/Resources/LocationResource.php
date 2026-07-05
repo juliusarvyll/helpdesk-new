@@ -5,11 +5,18 @@ namespace App\Filament\Resources;
 use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\LocationResource\Pages;
 use App\Filament\Resources\LocationResource\RelationManagers\InventoryItemsRelationManager;
+use App\Filament\Resources\PreventiveMaintenanceSessions\PreventiveMaintenanceSessionResource;
 use App\Models\Location;
+use App\Models\PmsChecklistTemplate;
+use App\Models\PreventiveMaintenanceAssetCheck;
+use App\Models\PreventiveMaintenanceSchedule;
+use App\PmsInspectionService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
@@ -53,6 +60,19 @@ class LocationResource extends Resource
                     ->counts('inventoryItemSerialNumbers')
                     ->label('Serials')
                     ->sortable(),
+                TextColumn::make('total_it_assets')
+                    ->label('Total IT Assets')
+                    ->state(fn (Location $record): int => $record->itAssetSerialNumbers()->count()),
+                TextColumn::make('last_pms_date')
+                    ->label('Last PMS Date')
+                    ->state(fn (Location $record) => PreventiveMaintenanceAssetCheck::query()->whereHas('serialNumber', fn ($query) => $query->where('location_id', $record->id))->max('completed_at'))
+                    ->dateTime(),
+                TextColumn::make('pending_pms_count')
+                    ->label('Pending PMS')
+                    ->state(fn (Location $record): int => $record->itAssetSerialNumbers()->whereDoesntHave('preventiveMaintenanceAssetChecks')->count()),
+                TextColumn::make('overdue_pms_count')
+                    ->label('Overdue PMS')
+                    ->state(fn (Location $record): int => PreventiveMaintenanceSchedule::query()->where('is_active', true)->where('next_due_at', '<', now())->whereHas('inventoryItemSerialNumber', fn ($query) => $query->where('location_id', $record->id))->count()),
                 static::compactTextColumn(TextColumn::make('description'), 44)
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -63,6 +83,22 @@ class LocationResource extends Resource
             ])
             ->defaultSort('name')
             ->actions([
+                Action::make('startPmsSession')
+                    ->label('Start PMS Session')
+                    ->icon('heroicon-o-play')
+                    ->visible(fn (): bool => auth()->user()?->hasAnyRole(['super_admin', 'admin', 'technical_support']) ?? false)
+                    ->form([
+                        Select::make('checklist_template_id')
+                            ->label('Checklist Template')
+                            ->options(fn (): array => PmsChecklistTemplate::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id')->all())
+                            ->required()
+                            ->searchable(),
+                    ])
+                    ->action(function (Location $record, array $data) {
+                        $session = app(PmsInspectionService::class)->startSession($record, auth()->user(), PmsChecklistTemplate::query()->findOrFail($data['checklist_template_id']));
+
+                        return redirect(PreventiveMaintenanceSessionResource::getUrl('view', ['record' => $session]));
+                    }),
                 ViewAction::make(),
                 EditAction::make(),
             ])

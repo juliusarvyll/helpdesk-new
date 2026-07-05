@@ -25,6 +25,7 @@ class InventoryCategoryFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'type' => 'asset',
+            'is_it_asset' => false,
         ]);
     }
 

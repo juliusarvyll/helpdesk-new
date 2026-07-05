@@ -130,8 +130,6 @@ class AdminAssignedController extends Controller
             $mytime = Carbon::now();
 
             if (! $find->issue) {
-                $data->category = $category->name;
-                $data->issue = $issues->issue;
                 $data->issue_id = $issues->id;
             }
             $data->end_time = $mytime->toDateTimeString();
@@ -226,8 +224,6 @@ class AdminAssignedController extends Controller
             $mytime = Carbon::now();
 
             if (! $find->issue) {
-                $data->category = $category->name;
-                $data->issue = $issues->issue;
                 $data->issue_id = $issues->id;
             }
             $data->end_time = $mytime->toDateTimeString();
@@ -299,7 +295,7 @@ class AdminAssignedController extends Controller
         SystemLogs::saveLogs('admin visited all closed  tickets list!');
         Menu::menu_controller();
 
-        return view('admin.assigned.closed',compact('data','count_active','count_closed'));
+        return view('admin.assigned.closed', compact('data', 'count_active', 'count_closed'));
 
     }
 }

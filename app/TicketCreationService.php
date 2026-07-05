@@ -28,7 +28,6 @@ class TicketCreationService
             $data = TicketResource::sanitizeClientTicketData($data, preserveOwnership: true);
 
             $data['created_by'] = $creator->id;
-            $data['created_ticket'] = $creator->name;
             $data['status'] ??= TicketStatus::Active;
 
             $ticket = Ticket::create($data);
@@ -67,6 +66,7 @@ class TicketCreationService
         }
 
         $serialNumber = InventoryItemSerialNumber::query()
+            ->lockForUpdate()
             ->findOrFail($data['inventory_item_serial_number_id']);
 
         if ($serialNumber->hasOpenTicket()) {

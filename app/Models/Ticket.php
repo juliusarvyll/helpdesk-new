@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Schema;
 
 class Ticket extends Model
@@ -16,11 +17,11 @@ class Ticket extends Model
     use HasFactory;
 
     protected $fillable = [
-        'subject', 'description', 'priority', 'issue',
+        'subject', 'description', 'priority',
         'issue_id', 'client_id', 'department_id',
         'support_assignment_status', 'assigned_at', 'start_time', 'end_time', 'status',
         'rate', 'technical_support_remarks', 'client_comments',
-        'client_confirmation', 'created_ticket', 'created_by', 'asset_id', 'asset_name',
+        'client_confirmation', 'created_by',
         'inventory_item_id', 'inventory_item_serial_number_id',
     ];
 
@@ -31,7 +32,7 @@ class Ticket extends Model
             'end_time' => 'datetime',
             'assigned_at' => 'datetime',
             'rate' => 'integer',
-            'client_confirmation' => 'integer',
+            'client_confirmation' => 'boolean',
             'status' => TicketStatus::class,
         ];
     }
@@ -64,6 +65,11 @@ class Ticket extends Model
     public function inventoryItemSerialNumber(): BelongsTo
     {
         return $this->belongsTo(InventoryItemSerialNumber::class);
+    }
+
+    public function preventiveMaintenanceLogs(): HasMany
+    {
+        return $this->hasMany(PreventiveMaintenanceLog::class);
     }
 
     public function technicalSupportUsers(): BelongsToMany

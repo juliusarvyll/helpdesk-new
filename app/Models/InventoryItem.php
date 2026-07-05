@@ -13,6 +13,7 @@ class InventoryItem extends Model
 
     protected $fillable = [
         'inventory_category_id',
+        'is_it_asset',
         'asset_tag',
         'name',
         'description',
@@ -36,6 +37,7 @@ class InventoryItem extends Model
             'warranty_expires_at' => 'date',
             'is_deleted' => 'boolean',
             'quantity' => 'integer',
+            'is_it_asset' => 'boolean',
         ];
     }
 
@@ -59,6 +61,11 @@ class InventoryItem extends Model
         return $this->belongsTo(Ticket::class, 'current_ticket_id');
     }
 
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
     public function transactions(): HasMany
     {
         return $this->hasMany(InventoryTransaction::class);
@@ -67,6 +74,21 @@ class InventoryItem extends Model
     public function tickets(): HasMany
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    public function jobOrders(): HasMany
+    {
+        return $this->hasMany(JobOrder::class);
+    }
+
+    public function preventiveMaintenanceSchedules(): HasMany
+    {
+        return $this->hasMany(PreventiveMaintenanceSchedule::class);
+    }
+
+    public function preventiveMaintenanceAssetChecks(): HasMany
+    {
+        return $this->hasMany(PreventiveMaintenanceAssetCheck::class);
     }
 
     public function serialNumbers(): HasMany

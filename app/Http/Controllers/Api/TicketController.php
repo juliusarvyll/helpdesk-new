@@ -21,8 +21,6 @@ class TicketController extends Controller
             'priority' => 'required|in:low,normal,high,critical',
             'client_id' => 'required|exists:users,id',
             'issue_id' => 'required|exists:issue_list,id',
-            'asset_id' => 'nullable|string',
-            'asset_name' => 'nullable|string',
         ]);
 
         if ($validator->fails()) {
@@ -42,10 +40,7 @@ class TicketController extends Controller
             'client_id' => $client->id,
             'department_id' => $client->department_id,
             'status' => TicketStatus::Active,
-            'asset_id' => $request->asset_id,
-            'asset_name' => $request->asset_name,
             'created_by' => $client->id,
-            'created_ticket' => $client->name,
         ]);
 
         $technicalUsers = User::role(['super_admin', 'admin', 'technical_support'])
@@ -91,8 +86,6 @@ class TicketController extends Controller
                 'priority' => $ticket->priority,
                 'issue' => $ticket->issue?->issue,
                 'department' => $ticket->department?->name,
-                'asset_id' => $ticket->asset_id,
-                'asset_name' => $ticket->asset_name,
                 'created_at' => $ticket->created_at,
                 'updated_at' => $ticket->updated_at,
             ],

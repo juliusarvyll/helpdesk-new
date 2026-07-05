@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class InventoryItemSerialNumber extends Model
 {
@@ -51,6 +52,26 @@ class InventoryItemSerialNumber extends Model
         return $this->hasMany(Ticket::class, 'inventory_item_serial_number_id');
     }
 
+    public function jobOrders(): HasMany
+    {
+        return $this->hasMany(JobOrder::class, 'inventory_item_serial_number_id');
+    }
+
+    public function openJobOrders(): HasMany
+    {
+        return $this->jobOrders()->whereNotIn('status', ['closed', 'cancelled']);
+    }
+
+    public function preventiveMaintenanceAssetChecks(): HasMany
+    {
+        return $this->hasMany(PreventiveMaintenanceAssetCheck::class, 'inventory_item_serial_number_id');
+    }
+
+    public function latestPreventiveMaintenanceAssetCheck(): HasOne
+    {
+        return $this->hasOne(PreventiveMaintenanceAssetCheck::class, 'inventory_item_serial_number_id')->latestOfMany('completed_at');
+    }
+
     public function openTickets(): HasMany
     {
         return $this->tickets()->where('status', '!=', TicketStatus::Closed->value);
@@ -59,6 +80,17 @@ class InventoryItemSerialNumber extends Model
     public function hasOpenTicket(): bool
     {
         return $this->openTickets()->exists();
+    }
+
+    public function hasOpenJobOrder(): bool
+    {
+        return $this->openJobOrders()->exists();
+    }
+
+    public function isActiveForPms(): bool
+    {
+        return in_array($this->status, ['available', 'assigned', 'in_repair'], true)
+            && (bool) $this->inventoryItem?->is_it_asset;
     }
 
     private function syncInventoryItem(?int $originalInventoryItemId): void

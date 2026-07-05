@@ -110,8 +110,6 @@ class AdminTicketsController extends Controller
             if ($request->issues) {
 
                 $data->subject = $category->name;
-                $data->category = $category->name;
-                $data->issue = $issues->issue;
                 $data->issue_id = $issues->id;
 
             } else {
@@ -119,21 +117,12 @@ class AdminTicketsController extends Controller
                 $data->subject = '';
             }
             $data->description = '';
-            $data->location = '';
-            $data->client = $client->name;
             $data->client_id = $client->id;
 
             if ($request->technical_support) {
-
-                $data->technical_support = $technical_names;
-                $data->technical_support_id = $technical_id;
                 $data->support_assignment_status = 'Assigned';
             }
-            $data->department = $request->department;
-            $data->position = $request->position;
-            $data->role = $client->role;
             $data->status = $request->status;
-            $data->location = $request->location;
 
             if ($request->status == 'active' || $request->status == 'overdue' || $request->status == 'in progress') {
 
@@ -148,7 +137,7 @@ class AdminTicketsController extends Controller
 
             $data->technical_support_remarks = $request->remarks;
             $data->client_confirmation = 1;
-            $data->created_ticket = Auth::user()->name;
+            $data->created_by = Auth::id();
 
             if ($data->save()) {
                 SystemLogs::saveLogs('admin successfully created #'.$data->OrderNo.' subject '.$request->subject.' as new ticket!');

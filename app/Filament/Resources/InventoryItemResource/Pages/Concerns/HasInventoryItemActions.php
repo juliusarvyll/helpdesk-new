@@ -2,22 +2,21 @@
 
 namespace App\Filament\Resources\InventoryItemResource\Pages\Concerns;
 
+use App\AssetWorkOrderCreationService;
+use App\Filament\Resources\JobOrders\JobOrderResource;
 use App\Filament\Resources\TicketResource;
 use App\InventoryMovementService;
 use App\InventoryTicketDefaults;
 use App\Models\InventoryItemSerialNumber;
 use App\Models\InventoryTransaction;
-use App\Models\IssueCategory;
-use App\Models\IssueList;
+use App\Models\JobOrder;
 use App\Models\Location;
 use App\Models\Ticket;
 use App\Models\User;
-use App\TicketCreationService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 
 trait HasInventoryItemActions
@@ -28,11 +27,11 @@ trait HasInventoryItemActions
     protected function inventoryItemActions(): array
     {
         return [
-            Action::make('createTicket')
-                ->label('Create Ticket')
+            Action::make('createWorkRequest')
+                ->label('Create Work Request')
                 ->icon('heroicon-o-ticket')
                 ->color('success')
-                ->visible(fn (): bool => $this->record->serialNumbers()->exists() && (auth()->user()?->can('create_ticket') ?? false))
+                ->visible(fn (): bool => $this->record->serialNumbers()->exists() && (auth()->user()?->can($this->record->is_it_asset ? 'create_ticket' : 'create_job_order') ?? false))
                 ->form([
                     TextInput::make('subject')
                         ->required()
@@ -48,34 +47,7 @@ trait HasInventoryItemActions
                         ))
                         ->required()
                         ->columnSpanFull(),
-                    Select::make('priority')
-                        ->options(['low' => 'Low', 'normal' => 'Normal', 'critical' => 'Critical'])
-                        ->default('normal')
-                        ->required(),
-                    Select::make('category')
-                        ->options(fn () => IssueCategory::query()
-                            ->where('is_deleted', 0)
-                            ->orderBy('name')
-                            ->pluck('name', 'id'))
-                        ->searchable()
-                        ->live()
-                        ->afterStateUpdated(fn (callable $set) => $set('issue_id', null))
-                        ->visible(fn (): bool => TicketResource::shouldCollectTicketClassification())
-                        ->required(fn (): bool => TicketResource::shouldCollectTicketClassification()),
-                    Select::make('issue_id')
-                        ->label('Issue')
-                        ->options(fn (Get $get) => filled($get('category'))
-                            ? IssueList::query()
-                                ->where('issue_category_id', $get('category'))
-                                ->where('is_deleted', 0)
-                                ->orderBy('issue')
-                                ->pluck('issue', 'id')
-                            : [])
-                        ->searchable()
-                        ->visible(fn (): bool => TicketResource::shouldCollectTicketClassification())
-                        ->required(fn (): bool => TicketResource::shouldCollectTicketClassification()),
                     Select::make('inventory_item_serial_number_id')
-                        ->label('Serial Number')
                         ->options(fn () => $this->record->serialNumbers()
                             ->orderBy('serial_number')
                             ->pluck('serial_number', 'id'))
@@ -85,54 +57,9 @@ trait HasInventoryItemActions
                             $defaults = app(InventoryTicketDefaults::class);
                             $serialNumberId = filled($state) ? (int) $state : null;
 
-                            if (TicketResource::canSelectTicketClient()) {
-                                $set('client_id', $defaults->clientId($this->record, $serialNumberId, auth()->user()));
-                            }
-
                             $set('subject', $defaults->subject($this->record, $serialNumberId));
                             $set('description', $defaults->description($this->record, $serialNumberId));
                         })
-                        ->searchable()
-                        ->required(),
-                    Select::make('client_id')
-                        ->label('Client')
-                        ->options(function (Get $get) {
-                            $defaults = app(InventoryTicketDefaults::class);
-                            $serialNumberId = filled($get('inventory_item_serial_number_id'))
-                                ? (int) $get('inventory_item_serial_number_id')
-                                : $defaults->serialNumberId($this->record);
-                            $defaultClientId = $defaults->clientId($this->record, $serialNumberId, auth()->user());
-
-                            if (TicketResource::canSelectTicketClient()) {
-                                $clients = User::role(['client'])
-                                    ->where('status', 1)
-                                    ->where('is_deleted', 0)
-                                    ->orderBy('name')
-                                    ->pluck('name', 'id');
-
-                                if ($defaultClientId && ! $clients->has($defaultClientId)) {
-                                    $defaultClient = User::query()
-                                        ->whereKey($defaultClientId)
-                                        ->where('status', 1)
-                                        ->where('is_deleted', 0)
-                                        ->pluck('name', 'id');
-
-                                    return $clients->merge($defaultClient);
-                                }
-
-                                return $clients;
-                            }
-
-                            return [auth()->id() => auth()->user()->name];
-                        })
-                        ->default(fn (Get $get): ?int => TicketResource::canSelectTicketClient()
-                            ? app(InventoryTicketDefaults::class)->clientId(
-                                $this->record,
-                                $get('inventory_item_serial_number_id') ?: app(InventoryTicketDefaults::class)->serialNumberId($this->record),
-                                auth()->user(),
-                            )
-                            : auth()->id())
-                        ->disabled(fn (): bool => ! TicketResource::canSelectTicketClient())
                         ->searchable()
                         ->required(),
                     Textarea::make('client_comments')
@@ -140,14 +67,15 @@ trait HasInventoryItemActions
                         ->columnSpanFull(),
                 ])
                 ->action(function (array $data): void {
-                    $ticket = app(TicketCreationService::class)->create([
+                    $work = app(AssetWorkOrderCreationService::class)->create($this->record, [
                         ...$data,
-                        'inventory_item_id' => $this->record->id,
-                        'asset_id' => $this->record->asset_tag,
-                        'asset_name' => $this->record->name,
+                        'priority' => 'normal',
+                        'client_id' => auth()->id(),
                     ], auth()->user());
 
-                    $this->redirect(TicketResource::getUrl('view', ['record' => $ticket]));
+                    $this->redirect($work instanceof JobOrder
+                        ? JobOrderResource::getUrl('view', ['record' => $work])
+                        : TicketResource::getUrl('view', ['record' => $work]));
                 }),
             Action::make('assign')
                 ->icon('heroicon-o-user-plus')

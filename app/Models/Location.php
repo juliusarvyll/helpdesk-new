@@ -35,4 +35,16 @@ class Location extends Model
         return $this->hasMany(InventoryItemSerialNumber::class)
             ->whereHas('inventoryItem', fn ($query) => $query->where('is_deleted', false));
     }
+
+    public function itAssetSerialNumbers(): HasMany
+    {
+        return $this->inventoryItemSerialNumbers()
+            ->whereIn('status', ['available', 'assigned', 'in_repair'])
+            ->whereHas('inventoryItem', fn ($query) => $query->where('is_it_asset', true));
+    }
+
+    public function preventiveMaintenanceSessions(): HasMany
+    {
+        return $this->hasMany(PreventiveMaintenanceSession::class);
+    }
 }

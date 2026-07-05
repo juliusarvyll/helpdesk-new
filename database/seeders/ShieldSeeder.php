@@ -41,6 +41,7 @@ class ShieldSeeder extends Seeder
         'issue::list',
         'position',
         'ticket',
+        'job_order',
         'user',
     ];
 
@@ -51,6 +52,8 @@ class ShieldSeeder extends Seeder
         'assign_inventory_item',
         'adjust_stock_inventory_item',
         'retire_inventory_item',
+        'close_job_order',
+        'assign_job_order',
     ];
 
     public function run(): void
@@ -89,6 +92,16 @@ class ShieldSeeder extends Seeder
                 'permissions' => static::clientPermissions(),
             ],
             [
+                'name' => 'job_order_manager',
+                'guard_name' => 'web',
+                'permissions' => static::jobOrderManagerPermissions(),
+            ],
+            [
+                'name' => 'maintenance_staff',
+                'guard_name' => 'web',
+                'permissions' => static::maintenanceStaffPermissions(),
+            ],
+            [
                 'name' => 'panel_user',
                 'guard_name' => 'web',
                 'permissions' => [],
@@ -113,7 +126,7 @@ class ShieldSeeder extends Seeder
      */
     public static function adminPermissions(): array
     {
-        return collect(['department', 'inventory::category', 'inventory::item', 'inventory::transaction', 'issue::category', 'issue::list', 'position', 'ticket', 'user'])
+        return collect(['department', 'inventory::category', 'inventory::item', 'inventory::transaction', 'issue::category', 'issue::list', 'position', 'ticket', 'job_order', 'user'])
             ->flatMap(fn (string $resource): array => static::permissionsFor($resource))
             ->merge(self::CUSTOM_PERMISSIONS)
             ->values()
@@ -128,6 +141,7 @@ class ShieldSeeder extends Seeder
         return [
             'view_ticket',
             'view_any_ticket',
+            'create_ticket',
             'update_ticket',
             'view_inventory::item',
             'view_any_inventory::item',
@@ -145,6 +159,25 @@ class ShieldSeeder extends Seeder
     /**
      * @return array<int, string>
      */
+    public static function jobOrderManagerPermissions(): array
+    {
+        return collect(static::permissionsFor('job_order'))
+            ->merge(['close_job_order', 'assign_job_order'])
+            ->values()
+            ->all();
+    }
+
+    public static function maintenanceStaffPermissions(): array
+    {
+        return [
+            'view_job_order',
+            'view_any_job_order',
+            'create_job_order',
+            'update_job_order',
+            'close_job_order',
+        ];
+    }
+
     public static function clientPermissions(): array
     {
         return [

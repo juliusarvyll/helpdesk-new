@@ -3,12 +3,16 @@
 namespace App\Filament\Resources\TicketResource\Pages;
 
 use App\Filament\Resources\TicketResource;
+use App\Models\IssueCategory;
+use App\Models\IssueList;
 use App\Notifications\TicketAssigned;
 use App\TicketStatus;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Schemas\Components\Utilities\Get;
 
 class EditTicket extends EditRecord
 {
@@ -66,6 +70,28 @@ class EditTicket extends EditRecord
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->form([
+                        Select::make('category')
+                            ->options(fn () => IssueCategory::query()
+                                ->where('is_deleted', 0)
+                                ->orderBy('name')
+                                ->pluck('name', 'id'))
+                            ->default(fn (): ?int => $this->record->issue?->issue_category_id)
+                            ->searchable()
+                            ->live()
+                            ->afterStateUpdated(fn (callable $set) => $set('issue_id', null))
+                            ->required(),
+                        Select::make('issue_id')
+                            ->label('Issue')
+                            ->options(fn (Get $get) => filled($get('category'))
+                                ? IssueList::query()
+                                    ->where('issue_category_id', $get('category'))
+                                    ->where('is_deleted', 0)
+                                    ->orderBy('issue')
+                                    ->pluck('issue', 'id')
+                                : [])
+                            ->default(fn (): ?int => $this->record->issue_id)
+                            ->searchable()
+                            ->required(),
                         Textarea::make('technical_support_remarks')
                             ->label('Technical Support Remarks')
                             ->default(fn (): ?string => $this->record->technical_support_remarks)
@@ -75,6 +101,7 @@ class EditTicket extends EditRecord
                     ->requiresConfirmation()
                     ->action(function (array $data): void {
                         $this->record->forceFill([
+                            'issue_id' => $data['issue_id'],
                             'technical_support_remarks' => $data['technical_support_remarks'],
                         ]);
 

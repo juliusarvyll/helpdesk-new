@@ -373,7 +373,7 @@ class TicketResource extends Resource
 
     public static function shouldCollectTicketClassification(string $operation = 'create'): bool
     {
-        return $operation !== 'create' || ! static::isClient();
+        return $operation !== 'create';
     }
 
     public static function canSelectTicketClient(): bool
@@ -388,9 +388,11 @@ class TicketResource extends Resource
 
     public static function canShowAssignTicketAction(Ticket $ticket): bool
     {
+        $user = auth()->user();
+
         return $ticket->status !== TicketStatus::Closed
-            && static::canAssignUnassignedTickets()
-            && (auth()->user()?->can('update', $ticket) ?? false)
+            && ($user?->hasAnyRole(['super_admin', 'technical_support']))
+            && ($user?->can('update', $ticket) ?? false)
             && ! static::ticketHasTechnicalSupportAssignment($ticket);
     }
 
@@ -519,9 +521,7 @@ class TicketResource extends Resource
             return $issue->issue;
         }
 
-        $legacyIssue = $record->getAttribute('issue');
-
-        return is_string($legacyIssue) ? $legacyIssue : null;
+        return null;
     }
 
     /**

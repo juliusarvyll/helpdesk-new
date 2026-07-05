@@ -15,6 +15,7 @@ class InventoryItemFactory extends Factory
     {
         return [
             'inventory_category_id' => InventoryCategory::factory(),
+            'is_it_asset' => false,
             'asset_tag' => fake()->optional()->bothify('AST-####'),
             'name' => fake()->words(3, true),
             'description' => fake()->optional()->sentence(),
@@ -29,6 +30,11 @@ class InventoryItemFactory extends Factory
             'warranty_expires_at' => fake()->optional()->dateTimeBetween('now', '+3 years'),
             'is_deleted' => false,
         ];
+    }
+
+    public function itAsset(): static
+    {
+        return $this->state(fn (array $attributes): array => ['is_it_asset' => true]);
     }
 
     public function assigned(): static

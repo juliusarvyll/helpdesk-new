@@ -24,7 +24,7 @@ class UserResource extends Resource
 {
     use HasCompactTableColumns;
 
-    protected const ASSIGNABLE_SHIELD_ROLES = ['super_admin', 'admin', 'technical_support', 'client'];
+    protected const ASSIGNABLE_SHIELD_ROLES = ['super_admin', 'admin', 'technical_support', 'client', 'job_order_manager', 'maintenance_staff'];
 
     protected static ?string $model = User::class;
 
@@ -60,8 +60,7 @@ class UserResource extends Resource
                 ->helperText('Controls which department workspaces this user can access. The primary department is always included.'),
             Select::make('position_id')
                 ->options(fn (): array => static::positionOptions())
-                ->searchable()
-                ->preload(),
+                ->searchable(),
             Select::make('roles')
                 ->label('Roles')
                 ->relationship('roles', 'name', fn (Builder $query) => $query->whereIn('name', static::ASSIGNABLE_SHIELD_ROLES))

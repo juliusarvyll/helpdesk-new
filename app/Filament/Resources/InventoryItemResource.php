@@ -6,6 +6,7 @@ use App\Filament\Concerns\HasCompactTableColumns;
 use App\Filament\Resources\InventoryItemResource\Pages;
 use App\Filament\Resources\InventoryItemResource\RelationManagers\SerialNumbersRelationManager;
 use App\InventoryMovementService;
+use App\Models\InventoryCategory;
 use App\Models\InventoryItem;
 use App\Models\Ticket;
 use App\Models\User;
@@ -21,7 +22,9 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -54,13 +57,18 @@ class InventoryItemResource extends Resource
                 )
                 ->required()
                 ->searchable()
-                ->preload(),
+                ->preload()
+                ->live()
+                ->afterStateUpdated(fn (Set $set, ?int $state) => $set('is_it_asset', (bool) InventoryCategory::query()->whereKey($state)->value('is_it_asset'))),
             TextInput::make('asset_tag')
                 ->maxLength(255)
                 ->unique(ignoreRecord: true),
             TextInput::make('name')
                 ->required()
                 ->maxLength(255),
+            Toggle::make('is_it_asset')
+                ->label('IT Asset')
+                ->helperText('IT Assets are serviced through the Helpdesk Ticket system. Non-IT Assets are serviced through Job Orders.'),
             Textarea::make('description')
                 ->columnSpanFull(),
             TextInput::make('quantity')
@@ -203,6 +211,11 @@ class InventoryItemResource extends Resource
                     ->searchable()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('is_it_asset')
+                    ->label('Asset Classification')
+                    ->badge()
+                    ->formatStateUsing(fn (bool $state): string => $state ? 'IT Asset' : 'Non-IT Asset')
+                    ->color(fn (bool $state): string => $state ? 'info' : 'gray'),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -243,6 +256,9 @@ class InventoryItemResource extends Resource
                         'lost' => 'Lost',
                         'disposed' => 'Disposed',
                     ]),
+                SelectFilter::make('is_it_asset')
+                    ->label('Asset Classification')
+                    ->options([1 => 'IT Asset', 0 => 'Non-IT Asset']),
                 SelectFilter::make('inventory_category_id')
                     ->relationship(
                         'category',

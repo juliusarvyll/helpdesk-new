@@ -250,7 +250,6 @@ class FilamentResourcesTest extends TestCase
             'subject' => 'Printer not working',
             'description' => 'The shared printer is offline.',
             'priority' => 'normal',
-            'created_ticket' => 'Angelo Peralta',
         ]);
 
         $this->assertEquals($department->id, $ticket->department_id);

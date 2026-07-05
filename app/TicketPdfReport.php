@@ -129,7 +129,7 @@ class TicketPdfReport
                 .str_pad($ticket->created_at?->format('Y-m-d H:i') ?? '-', 17)
                 .str_pad(static::statusLabel($ticket), 14)
                 .str_pad(Str::headline((string) $ticket->priority), 11)
-                .str_pad(static::shortText($ticket->client?->name ?? $ticket->created_ticket ?? '-'), 24)
+                .str_pad(static::shortText($ticket->client?->name ?? '-'), 24)
                 .str_pad(static::shortText($ticket->technicalSupportUsers->pluck('name')->join(', ') ?: 'Unassigned'), 24)
                 .static::shortText($ticket->subject, 38);
         }

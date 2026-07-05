@@ -5,11 +5,16 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Schema;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Schedule::command('maintenance:generate-preventive-work')
+    ->daily()
+    ->withoutOverlapping();
 
 Artisan::command('helpdesk:seed-legacy-compatibility', function (): int {
     $this->info('Creating Laravel runtime tables...');
@@ -204,7 +209,7 @@ Artisan::command('helpdesk:seed-legacy-compatibility', function (): int {
             SELECT roles.id, "App\\\\Models\\\\User", users.id
             FROM users
             JOIN roles ON roles.name = users.role AND roles.guard_name = "web"
-            WHERE users.role IN ("admin", "client", "super_admin", "technical_support", "panel_user")
+            WHERE users.role IN ("admin", "client", "super_admin", "technical_support", "panel_user", "job_order_manager", "maintenance_staff")
         ');
     }
 
@@ -215,7 +220,7 @@ Artisan::command('helpdesk:seed-legacy-compatibility', function (): int {
             FROM users
             JOIN role legacy_roles ON legacy_roles.id = users.role_id
             JOIN roles ON roles.name = legacy_roles.name AND roles.guard_name = "web"
-            WHERE legacy_roles.name IN ("admin", "client", "super_admin", "technical_support", "panel_user")
+            WHERE legacy_roles.name IN ("admin", "client", "super_admin", "technical_support", "panel_user", "job_order_manager", "maintenance_staff")
         ');
     }
 

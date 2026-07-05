@@ -31,11 +31,15 @@ class InventoryItemCsvImporter
                 ? (string) $rowData['status']
                 : ($assignedToUserId ? 'assigned' : 'available');
             $categoryId = $this->categoryId($rowData, $tenant);
+            $isItAsset = filled($rowData['is_it_asset'] ?? null)
+                ? filter_var($rowData['is_it_asset'], FILTER_VALIDATE_BOOL)
+                : (bool) InventoryCategory::query()->whereKey($categoryId)->value('is_it_asset');
             $serialNumbers = $this->serialNumbers($rowData);
             $serialLocationIds = $this->serialLocationIds($rowData, $tenant, $serialNumbers);
 
             $attributes = [
                 'inventory_category_id' => $categoryId,
+                'is_it_asset' => $isItAsset,
                 'name' => $rowData['name'],
                 'description' => ($rowData['description'] ?? '') ?: null,
                 'status' => $status,

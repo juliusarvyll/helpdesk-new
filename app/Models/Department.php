@@ -39,6 +39,21 @@ class Department extends Model
         return $this->hasMany(Location::class);
     }
 
+    public function jobOrders(): HasMany
+    {
+        return $this->hasMany(JobOrder::class);
+    }
+
+    public function preventiveMaintenanceSchedules(): HasMany
+    {
+        return $this->hasMany(PreventiveMaintenanceSchedule::class);
+    }
+
+    public function preventiveMaintenanceSessions(): HasMany
+    {
+        return $this->hasMany(PreventiveMaintenanceSession::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'department_id');

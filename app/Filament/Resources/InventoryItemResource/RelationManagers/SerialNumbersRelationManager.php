@@ -2,15 +2,18 @@
 
 namespace App\Filament\Resources\InventoryItemResource\RelationManagers;
 
+use App\AssetWorkOrderCreationService;
 use App\Filament\Concerns\HasCompactTableColumns;
+use App\Filament\Resources\JobOrders\JobOrderResource;
 use App\Filament\Resources\TicketResource;
 use App\InventoryTicketDefaults;
 use App\Models\InventoryItemSerialNumber;
 use App\Models\IssueCategory;
 use App\Models\IssueList;
+use App\Models\JobOrder;
 use App\Models\Location;
 use App\Models\User;
-use App\TicketCreationService;
+use App\TicketStatus;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
@@ -46,8 +49,13 @@ class SerialNumbersRelationManager extends RelationManager
                 ->with([
                     'assignedToUser',
                     'location',
+                    'latestPreventiveMaintenanceAssetCheck.inspector',
                 ])
-                ->withCount('openTickets'))
+                ->withCount([
+                    'openTickets',
+                    'preventiveMaintenanceAssetChecks',
+                    'preventiveMaintenanceAssetChecks as open_pms_repair_tickets_count' => fn (Builder $query): Builder => $query->whereHas('ticket', fn (Builder $query): Builder => $query->where('status', '!=', TicketStatus::Closed->value)),
+                ]))
             ->columns([
                 static::compactTextColumn(TextColumn::make('serial_number'), 32)
                     ->label('Serial Number')
@@ -75,6 +83,20 @@ class SerialNumbersRelationManager extends RelationManager
                     ->state(fn (InventoryItemSerialNumber $record): int => static::openTicketsCount($record))
                     ->badge()
                     ->color(fn (int $state): string => $state > 0 ? 'warning' : 'gray'),
+                TextColumn::make('latestPreventiveMaintenanceAssetCheck.completed_at')
+                    ->label('Last PMS Date')
+                    ->dateTime(),
+                TextColumn::make('latestPreventiveMaintenanceAssetCheck.inspector.name')
+                    ->label('Last Inspector'),
+                TextColumn::make('latestPreventiveMaintenanceAssetCheck.status')
+                    ->label('Last Result')
+                    ->badge(),
+                TextColumn::make('preventive_maintenance_asset_checks_count')
+                    ->label('Inspection Count'),
+                TextColumn::make('open_pms_repair_tickets_count')
+                    ->label('Open Repair Tickets')
+                    ->badge()
+                    ->color(fn (int $state): string => $state > 0 ? 'danger' : 'gray'),
             ])
             ->headerActions([
                 CreateAction::make()
@@ -119,11 +141,30 @@ class SerialNumbersRelationManager extends RelationManager
                     ]),
             ])
             ->actions([
-                Action::make('createTicket')
-                    ->label('Create Ticket')
+                Action::make('viewPmsHistory')
+                    ->label('PMS History')
+                    ->icon('heroicon-o-clock')
+                    ->visible(fn (): bool => (bool) $this->getOwnerRecord()->is_it_asset)
+                    ->modalHeading(fn (InventoryItemSerialNumber $record): string => "PMS History: {$record->serial_number}")
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->modalContent(fn (InventoryItemSerialNumber $record) => view('filament.inventory.pms-history', [
+                        'checks' => $record->preventiveMaintenanceAssetChecks()
+                            ->with(['inspector', 'ticket'])
+                            ->latest('completed_at')
+                            ->get(),
+                    ])),
+                Action::make('createWorkRequest')
+                    ->label('Create Work Request')
                     ->icon('heroicon-o-ticket')
                     ->color('success')
-                    ->visible(fn (InventoryItemSerialNumber $record): bool => (auth()->user()?->can('create_ticket') ?? false) && ! static::hasOpenTickets($record))
+                    ->visible(function (InventoryItemSerialNumber $record): bool {
+                        $ownerRecord = $this->getOwnerRecord();
+                        $permission = $ownerRecord->is_it_asset ? 'create_ticket' : 'create_job_order';
+                        $hasOpenWork = $ownerRecord->is_it_asset ? static::hasOpenTickets($record) : $record->hasOpenJobOrder();
+
+                        return (auth()->user()?->can($permission) ?? false) && ! $hasOpenWork;
+                    })
                     ->form([
                         TextInput::make('subject')
                             ->required()
@@ -139,10 +180,6 @@ class SerialNumbersRelationManager extends RelationManager
                             ))
                             ->required()
                             ->columnSpanFull(),
-                        Select::make('priority')
-                            ->options(['low' => 'Low', 'normal' => 'Normal', 'critical' => 'Critical'])
-                            ->default('normal')
-                            ->required(),
                         Select::make('category')
                             ->options(fn () => IssueCategory::query()
                                 ->where('is_deleted', 0)
@@ -165,28 +202,22 @@ class SerialNumbersRelationManager extends RelationManager
                             ->searchable()
                             ->visible(fn (): bool => TicketResource::shouldCollectTicketClassification())
                             ->required(fn (): bool => TicketResource::shouldCollectTicketClassification()),
-                        Select::make('client_id')
-                            ->label('Client')
-                            ->options(fn (InventoryItemSerialNumber $record) => $this->clientOptions($record))
-                            ->default(fn (InventoryItemSerialNumber $record): ?int => $this->defaultClientId($record))
-                            ->disabled(fn (): bool => ! TicketResource::canSelectTicketClient())
-                            ->searchable()
-                            ->required(),
                         Textarea::make('client_comments')
                             ->label(fn (): string => TicketResource::isClient() ? 'Comment' : 'Client Comments')
                             ->columnSpanFull(),
                     ])
                     ->action(function (InventoryItemSerialNumber $record, array $data): void {
                         $ownerRecord = $this->getOwnerRecord();
-                        $ticket = app(TicketCreationService::class)->create([
+                        $work = app(AssetWorkOrderCreationService::class)->create($ownerRecord, [
                             ...$data,
-                            'inventory_item_id' => $ownerRecord->id,
+                            'priority' => 'normal',
+                            'client_id' => auth()->id(),
                             'inventory_item_serial_number_id' => $record->id,
-                            'asset_id' => $ownerRecord->asset_tag,
-                            'asset_name' => $ownerRecord->name,
                         ], auth()->user());
 
-                        $this->redirect(TicketResource::getUrl('view', ['record' => $ticket]));
+                        $this->redirect($work instanceof JobOrder
+                            ? JobOrderResource::getUrl('view', ['record' => $work])
+                            : TicketResource::getUrl('view', ['record' => $work]));
                     }),
                 EditAction::make()
                     ->form([

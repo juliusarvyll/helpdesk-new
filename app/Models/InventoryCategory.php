@@ -15,6 +15,7 @@ class InventoryCategory extends Model
         'department_id',
         'name',
         'type',
+        'is_it_asset',
         'parent_id',
         'is_deleted',
     ];
@@ -23,6 +24,7 @@ class InventoryCategory extends Model
     {
         return [
             'is_deleted' => 'boolean',
+            'is_it_asset' => 'boolean',
         ];
     }
 

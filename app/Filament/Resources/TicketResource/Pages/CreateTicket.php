@@ -21,7 +21,6 @@ class CreateTicket extends CreateRecord
         $data = TicketResource::sanitizeClientTicketData($data, preserveOwnership: true);
 
         $data['created_by'] = auth()->id();
-        $data['created_ticket'] = auth()->user()->name;
 
         return $data;
     }

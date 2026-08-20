@@ -27,27 +27,16 @@ return new class extends Migration
                 $table->timestamp('assigned_at')->nullable()->after('support_assignment_status');
             }
 
-            // Add foreign key constraints
-            $table->foreign('issue_id')->references('id')->on('issue_list')->nullOnDelete();
-            $table->foreign('client_id')->references('id')->on('users')->nullOnDelete();
-            $table->foreign('department_id')->references('id')->on('department')->nullOnDelete();
-            $table->foreign('created_by')->references('id')->on('users')->nullOnDelete();
-            $table->foreign('inventory_item_id')->references('id')->on('inventory_items')->nullOnDelete();
-            $table->foreign('inventory_item_serial_number_id', 'tickets_serial_number_id_foreign')
-                ->references('id')->on('inventory_item_serial_numbers')->nullOnDelete();
+            // Note: foreign key constraints for issue_id, client_id, department_id,
+            // created_by, inventory_item_id, and inventory_item_serial_number_id are
+            // already added by earlier migrations (2026_05_28_003713, 2026_05_28_013544,
+            // 2026_05_28_035606, 2026_05_28_081500) and must not be re-declared here.
         });
     }
 
     public function down(): void
     {
         Schema::table('tickets', function (Blueprint $table): void {
-            $table->dropForeign(['issue_id']);
-            $table->dropForeign(['client_id']);
-            $table->dropForeign(['department_id']);
-            $table->dropForeign(['created_by']);
-            $table->dropForeign(['inventory_item_id']);
-            $table->dropForeign('tickets_serial_number_id_foreign');
-
             $table->string('issue_id', 191)->nullable()->change();
             $table->integer('client_id')->nullable()->change();
             $table->string('client_confirmation', 191)->default('0')->change();

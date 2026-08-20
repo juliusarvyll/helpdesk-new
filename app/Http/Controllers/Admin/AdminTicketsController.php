@@ -269,7 +269,7 @@ class AdminTicketsController extends Controller
 
         if ($data) {
 
-            if ($data->client_id == Auth::id() || $data->created_ticket == Auth::user()->name || Auth::user()->role == 'admin') {
+            if ($data->client_id == Auth::id() || $data->created_by == Auth::id() || Auth::user()->role == 'admin') {
 
                 $count_active = Ticket::count_active(null);
                 $count_closed = Ticket::count_closed(null);

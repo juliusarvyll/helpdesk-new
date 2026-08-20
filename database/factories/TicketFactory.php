@@ -24,7 +24,6 @@ class TicketFactory extends Factory
             'priority' => fake()->randomElement(['low', 'normal', 'critical']),
             'status' => TicketStatus::Active,
             'support_assignment_status' => 'Not Yet Assigned',
-            'created_ticket' => fake()->name(),
         ];
     }
 }

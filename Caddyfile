@@ -1,0 +1,29 @@
+{
+      frankenphp
+      order php_server before file_server
+}
+
+{$SERVER_NAME:localhost}
+
+root * /app/public
+encode gzip zstd
+
+php_server {
+      root /app/public
+}
+
+request_body {
+      max_size 50MB
+}
+
+header {
+      -Server
+      X-Content-Type-Options nosniff
+      X-Frame-Options SAMEORIGIN
+      Referrer-Policy strict-origin-when-cross-origin
+}
+
+log {
+      output stdout
+      format json
+}

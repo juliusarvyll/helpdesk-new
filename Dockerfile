@@ -32,9 +32,8 @@ COPY --from=vendor /app /app
 
 RUN php artisan filament:assets \
     && chown -R www-data:www-data /app/storage /app/bootstrap/cache \
-    && chmod -R 775 /app/storage /app/bootst
+    && chmod -R 775 /app/storage /app/bootstrap/cache
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "php artisan migrate --forcxec frankenphp run --config
-/etc/frankenphp/Caddyfile --adapter caddyfil
+CMD ["sh", "-c", "php artisan migrate --force && SERVER_NAME=\":$PORT\" exec frankenphp run --config /etc/frankenphp/Caddyfile --adapter caddyfile"]
